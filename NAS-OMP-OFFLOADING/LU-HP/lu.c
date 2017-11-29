@@ -164,7 +164,7 @@ logical timeron;
 
 void omp_device_mem_init() {
   #pragma omp target enter data \
-          map (to: u[:5][:ISIZ3][:(ISIZ2/2*2+1)][:(ISIZ1/2*2+1)]) \
+          map (alloc: u[:5][:ISIZ3][:(ISIZ2/2*2+1)][:(ISIZ1/2*2+1)]) \
           map (alloc: a[:5][:5][:(ISIZ1*ISIZ2)]) \
           map (alloc: b[:5][:5][:(ISIZ1*ISIZ2)]) \
           map (alloc: c[:5][:5][:(ISIZ1*ISIZ2)]) \
@@ -172,7 +172,6 @@ void omp_device_mem_init() {
           map (alloc: flux_G[:5][:ISIZ3][:ISIZ2][:ISIZ1]) \
           map (alloc: indxp[:(ISIZ1+ISIZ2+ISIZ3-5)][:(ISIZ1*ISIZ2*3/4)]) \
           map (alloc: jndxp[:(ISIZ1+ISIZ2+ISIZ3-5)][:(ISIZ1*ISIZ2*3/4)]) \
-          map (alloc: np[:(ISIZ1+ISIZ2+ISIZ3-5)]) \
           map (alloc: rho_i[:ISIZ3][:(ISIZ2/2*2+1)][:(ISIZ1/2*2+1)]) \
           map (alloc: frct[:5][:ISIZ3][:(ISIZ2/2*2+1)][:(ISIZ1/2*2+1)]) \
           map (alloc: qs[:ISIZ3][:(ISIZ2/2*2+1)][:(ISIZ1/2*2+1)]) \
@@ -195,7 +194,6 @@ void omp_device_mem_delete() {
           map (delete: flux_G[:5][:ISIZ3][:ISIZ2][:ISIZ1]) \
           map (delete: indxp[:(ISIZ1+ISIZ2+ISIZ3-5)][:(ISIZ1*ISIZ2*3/4)]) \
           map (delete: jndxp[:(ISIZ1+ISIZ2+ISIZ3-5)][:(ISIZ1*ISIZ2*3/4)]) \
-          map (delete: np[:(ISIZ1+ISIZ2+ISIZ3-5)]) \
           map (delete: rho_i[:ISIZ3][:(ISIZ2/2*2+1)][:(ISIZ1/2*2+1)]) \
           map (delete: frct[:5][:ISIZ3][:(ISIZ2/2*2+1)][:(ISIZ1/2*2+1)]) \
           map (delete: qs[:ISIZ3][:(ISIZ2/2*2+1)][:(ISIZ1/2*2+1)]) \
@@ -254,7 +252,7 @@ int main(int argc, char *argv[])
   //---------------------------------------------------------------------
   setcoeff();
 
-  void omp_device_mem_init();
+  omp_device_mem_init();
 
   //---------------------------------------------------------------------
   // set the boundary values for dependent variables
@@ -265,7 +263,7 @@ int main(int argc, char *argv[])
   // set the initial values for dependent variables
   //---------------------------------------------------------------------
   setiv();
-  // #pragma omp target update to(u[:5][:ISIZ3][:(ISIZ2/2*2+1)][:(ISIZ1/2*2+1)])
+#pragma omp target update to(u[:5][:ISIZ3][:(ISIZ2/2*2+1)][:(ISIZ1/2*2+1)])
   //---------------------------------------------------------------------
   // compute the forcing term based on prescribed exact solution
   //---------------------------------------------------------------------
@@ -281,7 +279,7 @@ int main(int argc, char *argv[])
   //---------------------------------------------------------------------
   setbv();
   setiv();
-  // #pragma omp target update to(u[:5][:ISIZ3][:(ISIZ2/2*2+1)][:(ISIZ1/2*2+1)])
+ #pragma omp target update to(u[:5][:ISIZ3][:(ISIZ2/2*2+1)][:(ISIZ1/2*2+1)])
 
   //---------------------------------------------------------------------
   // perform the SSOR iterations
@@ -292,7 +290,7 @@ int main(int argc, char *argv[])
   //---------------------------------------------------------------------
   // compute the solution error
   //---------------------------------------------------------------------
-  // #pragma omp target update from(u[:5][:ISIZ3][:(ISIZ2/2*2+1)][:(ISIZ1/2*2+1)])
+#pragma omp target update from(u[:5][:ISIZ3][:(ISIZ2/2*2+1)][:(ISIZ1/2*2+1)])
   error();
 
   //---------------------------------------------------------------------

@@ -58,6 +58,7 @@
 ////-------------------------------------------------------------------------//
 
 #include "applu.incl"
+#include <stdio.h>
 
 //---------------------------------------------------------------------
 //
@@ -82,28 +83,33 @@ void erhs()
   double u21km1, u31km1, u41km1, u51km1;
   //unsigned int num_workers = 0;
 
-#pragma omp target data map (always tofrom: rsd, frct, ce, flux_G)
+#pragma omp target data map(alloc: frct, rsd, ce, flux_G)
   {  
-
 #ifndef CRPL_COMP
-    #pragma omp target parallel for private(k, j, i, m)
+    #pragma omp target teams 
+    #pragma omp distribute // private(k, j, i, m)
 #elif CRPL_COMP == 0
-    #pragma omp target parallel for private(k, j, i, m)
+    #pragma omp target teams
+    {
+      #pragma omp distribute // for private(k, j, i, m)
 #endif
-    for (k = 0; k < nz; k++) {
-      for (j = 0; j < ny; j++) {
-        for (i = 0; i < nx; i++) {
-          for (m = 0; m < 5; m++) {
-            frct[m][k][j][i] = 0.0;
+      for (k = 0; k < nz; k++) {
+        for (j = 0; j < ny; j++) {
+          for (i = 0; i < nx; i++) {
+            for (m = 0; m < 5; m++) {
+              frct[m][k][j][i] = 0.0;
+            }
           }
         }
       }
     }
 
 #ifndef CRPL_COMP
-    #pragma omp target parallel for private(k, j, i, m, zeta, eta, xi)
+    #pragma omp target teams 
+    #pragma omp distribute // private(k, j, i, m, zeta, eta, xi)
 #elif CRPL_COMP == 0
-    #pragma omp target parallel for private(k, j, i, m, zeta, eta, xi)
+    #pragma omp target teams 
+    #pragma omp distribute // private(k, j, i, m, zeta, eta, xi)
 #endif
     for (k = 0; k < nz; k++) {
       zeta = ( (double)k ) / ( nz - 1 );
@@ -134,9 +140,11 @@ void erhs()
     // xi-direction flux differences
     //---------------------------------------------------------------------
 #ifndef CRPL_COMP
-    #pragma omp target parallel for private(k, j, i, u21, q)
+    #pragma omp target teams 
+    #pragma omp distribute // private(k, j, i, u21, q)
 #elif CRPL_COMP == 0
-    #pragma omp target parallel for private(k, j, i, u21, q)
+    #pragma omp target teams 
+    #pragma omp distribute // private(k, j, i, u21, q)
 #endif
     for (k = 1; k < nz - 1; k++) {
       for (j = jst; j <= jend; j++) {
@@ -156,9 +164,11 @@ void erhs()
     }
 
 #ifndef CRPL_COMP
-    #pragma omp target parallel for private(k, j, i, m)
+    #pragma omp target teams 
+    #pragma omp distribute // private(k, j, i, m)
 #elif CRPL_COMP == 0
-    #pragma omp target parallel for private(k, j, i, m)
+    #pragma omp target teams
+    #pragma omp distribute// for private(k, j, i, m)
 #endif
     for (k = 1; k < nz - 1; k++) {
       for (j = jst; j <= jend; j++) {
@@ -172,10 +182,12 @@ void erhs()
     }
 
 #ifndef CRPL_COMP
-    #pragma omp target parallel for \
+    #pragma omp target teams 
+    #pragma omp distribute // \
             private(k, j, i, m, tmp, u21i, u31i, u41i, u51i, u21im1, u31im1, u41im1, u51im1)
 #elif CRPL_COMP == 0
-    #pragma omp target parallel for \
+    #pragma omp target teams 
+    #pragma omp distribute // \
             private(k, j, i, m, tmp, u21i, u31i, u41i, u51i, u21im1, u31im1, u41im1, u51im1)
 #endif
     for (k = 1; k < nz - 1; k++) {
@@ -209,9 +221,11 @@ void erhs()
     }
 
 #ifndef CRPL_COMP
-    #pragma omp target parallel for private (k, j, i)
+    #pragma omp target teams 
+    #pragma omp distribute // private (k, j, i)
 #elif CRPL_COMP == 0
-    #pragma omp target parallel for private (k, j, i)
+    #pragma omp target teams 
+    #pragma omp distribute // private (k, j, i)
 #endif
     for (k = 1; k < nz - 1; k++) {
       for (j = jst; j <= jend; j++) {
@@ -249,9 +263,11 @@ void erhs()
     //---------------------------------------------------------------------
     //num_workers = (jend-jst+1)/32;
 #ifndef CRPL_COMP
-    #pragma omp target parallel for private (k, j, m)
+    #pragma omp target teams 
+    #pragma omp distribute // private (k, j, m)
 #elif CRPL_COMP == 0
-    #pragma omp target parallel for private (k, j, m)
+    #pragma omp target teams 
+    #pragma omp distribute // private (k, j, m)
 #endif
     for (k = 1; k < nz - 1; k++) {
       for (j = jst; j <= jend; j++) {
@@ -270,9 +286,11 @@ void erhs()
     }
 
 #ifndef CRPL_COMP
-    #pragma omp target parallel for private (k, j, i, m)
+    #pragma omp target teams 
+    #pragma omp distribute // private (k, j, i, m)
 #elif CRPL_COMP == 0
-    #pragma omp target parallel for private (k, j, i, m)
+    #pragma omp target teams 
+    #pragma omp distribute // private (k, j, i, m)
 #endif
     for (k = 1; k < nz - 1; k++) {
       for (j = jst; j <= jend; j++) {
@@ -290,9 +308,11 @@ void erhs()
     }
 
 #ifndef CRPL_COMP
-    #pragma omp target parallel for private (k, j, m)
+    #pragma omp target teams 
+    #pragma omp distribute // private (k, j, m)
 #elif CRPL_COMP == 0
-    #pragma omp target parallel for private (k, j, m)
+    #pragma omp target teams 
+    #pragma omp distribute // private (k, j, m)
 #endif
     for (k = 1; k < nz - 1; k++) {
       for (j = jst; j <= jend; j++) {
@@ -314,9 +334,11 @@ void erhs()
     // eta-direction flux differences
     //---------------------------------------------------------------------
 #ifndef CRPL_COMP
-    #pragma omp target parallel for private (k, j, i, u31, q)
+    #pragma omp target teams 
+    #pragma omp distribute // private (k, j, i, u31, q)
 #elif CRPL_COMP == 0
-    #pragma omp target parallel for private (k, j, i, u31, q)
+    #pragma omp target teams 
+    #pragma omp distribute // private (k, j, i, u31, q)
 #endif
     for (k = 1; k < nz - 1; k++) {
       for (i = ist; i <= iend; i++) {
@@ -336,9 +358,11 @@ void erhs()
     }
 
 #ifndef CRPL_COMP
-    #pragma omp target parallel for private (k, j, i, m)
+    #pragma omp target teams 
+    #pragma omp distribute // private (k, j, i, m)
 #elif CRPL_COMP == 0
-    #pragma omp target parallel for private (k, j, i, m)
+    #pragma omp target teams 
+    #pragma omp distribute // private (k, j, i, m)
 #endif
     for (k = 1; k < nz - 1; k++) {
       for (i = ist; i <= iend; i++) {
@@ -352,10 +376,12 @@ void erhs()
     }
 
 #ifndef CRPL_COMP
-    #pragma omp target parallel for \
+    #pragma omp target teams 
+    #pragma omp distribute // \
             private (k, j, i, tmp, u21j, u31j, u41j, u51j, u21jm1, u31jm1, u41jm1, u51jm1)
 #elif CRPL_COMP == 0
-    #pragma omp target parallel for \
+    #pragma omp target teams 
+    #pragma omp distribute // \
             private (k, j, i, tmp, u21j, u31j, u41j, u51j, u21jm1, u31jm1, u41jm1, u51jm1)
 #endif
     for (k = 1; k < nz - 1; k++) {
@@ -389,9 +415,11 @@ void erhs()
     }
 
 #ifndef CRPL_COMP
-    #pragma omp target parallel for private (k, j, i)
+    #pragma omp target teams 
+    #pragma omp distribute // private (k, j, i)
 #elif CRPL_COMP == 0
-    #pragma omp target parallel for private (k, j, i)
+    #pragma omp target teams 
+    #pragma omp distribute // private (k, j, i)
 #endif
     for (k = 1; k < nz - 1; k++) {
       for (i = ist; i <= iend; i++) {
@@ -430,9 +458,11 @@ void erhs()
 
     //num_workers = (iend-ist+1)/32;
 #ifndef CRPL_COMP
-    #pragma omp target parallel for private (k, i, m)
+    #pragma omp target teams 
+    #pragma omp distribute // private (k, i, m)
 #elif CRPL_COMP == 0
-    #pragma omp target parallel for private (k, i, m)
+    #pragma omp target teams 
+    #pragma omp distribute // private (k, i, m)
 #endif
     for (k = 1; k < nz - 1; k++) {
       for (i = ist; i <= iend; i++) {
@@ -451,9 +481,11 @@ void erhs()
     }
 
 #ifndef CRPL_COMP
-    #pragma omp target parallel for private (k, i, j, m)
+    #pragma omp target teams 
+    #pragma omp distribute // private (k, i, j, m)
 #elif CRPL_COMP == 0
-    #pragma omp target parallel for private (k, i, j, m) 
+    #pragma omp target teams 
+    #pragma omp distribute // private (k, i, j, m) 
 #endif
     for (k = 1; k < nz - 1; k++) {
       for (i = ist; i <= iend; i++) {
@@ -471,9 +503,11 @@ void erhs()
     }
 
 #ifndef CRPL_COMP
-    #pragma omp target parallel for private (k, i, m)
+    #pragma omp target teams 
+    #pragma omp distribute // private (k, i, m)
 #elif CRPL_COMP == 0
-    #pragma omp target parallel for private (k, i, m)
+    #pragma omp target teams 
+    #pragma omp distribute // private (k, i, m)
 #endif
     for (k = 1; k < nz - 1; k++) {
       for (i = ist; i <= iend; i++) {
@@ -495,9 +529,11 @@ void erhs()
     // zeta-direction flux differences
     //---------------------------------------------------------------------
 #ifndef CRPL_COMP
-    #pragma omp target parallel for private (k, i, j, u41, q)
+    #pragma omp target teams 
+    #pragma omp distribute // private (k, i, j, u41, q)
 #elif CRPL_COMP == 0
-    #pragma omp target parallel for private (k, i, j, u41, q)
+    #pragma omp target teams 
+    #pragma omp distribute // private (k, i, j, u41, q)
 #endif
     for (j = jst; j <= jend; j++) {
       for (i = ist; i <= iend; i++) {
@@ -517,9 +553,11 @@ void erhs()
     }
 
 #ifndef CRPL_COMP
-    #pragma omp target parallel for private (k, i, j, m)
+    #pragma omp target teams 
+    #pragma omp distribute // private (k, i, j, m)
 #elif CRPL_COMP == 0
-    #pragma omp target parallel for private (k, i, j, m)
+    #pragma omp target teams 
+    #pragma omp distribute // private (k, i, j, m)
 #endif
     for (j = jst; j <= jend; j++) {
       for (i = ist; i <= iend; i++) {
@@ -533,10 +571,12 @@ void erhs()
     }
 
 #ifndef CRPL_COMP
-    #pragma omp target parallel for \
+    #pragma omp target teams 
+    #pragma omp distribute // \
             private (j, i, k, tmp, u21k, u31k, u41k, u51k, u21km1, u31km1, u41km1, u51km1 )
 #elif CRPL_COMP == 0
-    #pragma omp target parallel for \
+    #pragma omp target teams 
+    #pragma omp distribute // \
             private (j, i, k, tmp, u21k, u31k, u41k, u51k, u21km1, u31km1, u41km1, u51km1 )
 #endif
     for (j = jst; j <= jend; j++) {
@@ -570,9 +610,11 @@ void erhs()
     }
 
 #ifndef CRPL_COMP
-    #pragma omp target parallel for private(j, i, k)
+    #pragma omp target teams 
+    #pragma omp distribute // private(j, i, k)
 #elif CRPL_COMP == 0
-    #pragma omp target parallel for private(j, i, k)
+    #pragma omp target teams 
+    #pragma omp distribute // private(j, i, k)
 #endif
     for (j = jst; j <= jend; j++) {
       for (i = ist; i <= iend; i++) {
@@ -609,9 +651,11 @@ void erhs()
     // fourth-order dissipation
     //---------------------------------------------------------------------
 #ifndef CRPL_COMP
-    #pragma omp target parallel for private(j, i, m)
+    #pragma omp target teams 
+    #pragma omp distribute // private(j, i, m)
 #elif CRPL_COMP == 0
-    #pragma omp target parallel for private(j, i, m)
+    #pragma omp target teams 
+    #pragma omp distribute // private(j, i, m)
 #endif
     for (j = jst; j <= jend; j++) {
       for (i = ist; i <= iend; i++) {
@@ -630,9 +674,11 @@ void erhs()
     }
 
 #ifndef CRPL_COMP
-    #pragma omp target parallel for private(j, i, k)
+    #pragma omp target teams 
+    #pragma omp distribute // private(j, i, k)
 #elif CRPL_COMP == 0
-    #pragma omp target parallel for private(j, i, k)
+    #pragma omp target teams 
+    #pragma omp distribute // private(j, i, k)
 #endif
     for (j = jst; j <= jend; j++) {
       for (i = ist; i <= iend; i++) {
@@ -650,9 +696,11 @@ void erhs()
     }
 
 #ifndef CRPL_COMP
-    #pragma omp target parallel for private(j, i, m)
+    #pragma omp target teams 
+    #pragma omp distribute // private(j, i, m)
 #elif CRPL_COMP == 0
-    #pragma omp target parallel for private(j, i, m)
+    #pragma omp target teams 
+    #pragma omp distribute // private(j, i, m)
 #endif
     for (j = jst; j <= jend; j++) {
       for (i = ist; i <= iend; i++) {

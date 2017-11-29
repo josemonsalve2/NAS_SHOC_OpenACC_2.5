@@ -79,13 +79,15 @@ void buts(int ldmx, int ldmy, int ldmz, int nx, int ny, int nz, int l,
   double tmp, tmp1;
   unsigned int npl = np[l];
 
-#pragma omp target data map (always tofrom: rsd, jndxp, indxp, a, b, c, d, tv, tmat) 
+#pragma omp target data map(alloc: a, b, c, d, indxp, jndxp, tv, rsd, tmat)
   {
     
 #ifndef CRPL_COMP
-    #pragma omp target parallel for private (n, j, i, k)
+    #pragma omp target teams 
+    #pragma omp distribute // private (n, j, i, k)
 #elif CRPL_COMP == 0
-    #pragma omp target parallel for private (n, j, i, k)
+    #pragma omp target teams 
+    #pragma omp distribute // private (n, j, i, k)
 #endif
     for (n = 1; n <= npl; n++) {
       j = jndxp[l][n];
@@ -102,9 +104,11 @@ void buts(int ldmx, int ldmy, int ldmz, int nx, int ny, int nz, int l,
     }
 
 #ifndef CRPL_COMP
-    #pragma omp target parallel for private (n, j, i, k, tmp, tmp1)
+    #pragma omp target teams 
+    #pragma omp distribute // private (n, j, i, k, tmp, tmp1)
 #elif CRPL_COMP == 0
-    #pragma omp target parallel for private (n, j, i, k, tmp, tmp1)
+    #pragma omp target teams 
+    #pragma omp distribute // private (n, j, i, k, tmp, tmp1)
 #endif
     for (n = 1; n <= npl; n++) {
       j = jndxp[l][n];

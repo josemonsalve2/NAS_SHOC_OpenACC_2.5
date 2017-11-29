@@ -104,9 +104,9 @@ ifeq ($(CC), clang)
     endif
 
     CC = clang
-    CFLAGS = -O3 
+    CFLAGS = -O3 -g
     CLINK = clang
-    CLINKFLAGS = -O3 
+    CLINKFLAGS = -O3 -g
     
     ifeq ($(PXM), omp)
         CFLAGS := $(CFLAGS) -fopenmp=libomp

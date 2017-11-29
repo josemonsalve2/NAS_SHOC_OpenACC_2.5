@@ -97,9 +97,11 @@ void ssor(int niter)
 {
 
 #ifndef CRPL_COMP
-    #pragma omp target parallel for private (l)
+    #pragma omp target teams
+    #pragma omp distribute // private (l)
 #elif CRPL_COMP == 0
-    #pragma omp target parallel for private (l)
+    #pragma omp target teams
+    #pragma omp distribute // private (l)
 #endif
   for (l = 0; l < ISIZ1*ISIZ2; l++) {
     for (n = 0; n < 5; n++) {
@@ -111,9 +113,6 @@ void ssor(int niter)
       }
     }
   }
-
-  // TODO REMOVE THIS JOSE
-  #pragma omp target update from(a,b,c,d)
 
   for (i = 1; i <= t_last; i++) {
     timer_clear(i);
@@ -127,7 +126,6 @@ void ssor(int niter)
   //---------------------------------------------------------------------
   // compute the L2 norms of newton iteration residuals
   //---------------------------------------------------------------------
-  #pragma omp target update to(rsd) 
   l2norm( ISIZ1, ISIZ2, ISIZ3, nx0, ny0, nz0,
       ist, iend, jst, jend);
  #pragma omp target update from(rsdnm)
@@ -156,7 +154,7 @@ void ssor(int niter)
   }
 
   calcnp(lst, lend);
- #pragma omp target update to(indxp,jndxp,np)
+ #pragma omp target update to(indxp,jndxp)
   timer_start(1);
   //---------------------------------------------------------------------
   // the timestep loop
@@ -178,13 +176,12 @@ void ssor(int niter)
     else
       num_workers = 32;
 
-      // TODO JOSE REMOVE THIS 
-    #pragma omp target update to(rsd) 
-
 #ifndef CRPL_COMP
-    #pragma omp target parallel for private (k, j, i)
+    #pragma omp target teams 
+    #pragma omp distribute // private (k, j, i)
 #elif CRPL_COMP == 0
-    #pragma omp target parallel for private (k, j, i)
+    #pragma omp target teams 
+    #pragma omp distribute // private (k, j, i)
 #endif
     for (k = 1; k < nz - 1; k++) {
       for (j = jst; j <= jend; j++) {
@@ -196,9 +193,6 @@ void ssor(int niter)
       }
     }
 
-    // TODO JOSE REMOVE THIS 
-    #pragma omp target update from(rsd) 
-    
     if (timeron) timer_stop(t_rhs);
 
     for(l = lst; l <= lend; l++)
@@ -225,14 +219,13 @@ void ssor(int niter)
     // update the variables
     //---------------------------------------------------------------------
     if (timeron) timer_start(t_add);
-
-    // TODO JOSE REMOVE THIS 
-    #pragma omp target update to(rsd, u) 
     
 #ifndef CRPL_COMP
-    #pragma omp target parallel for private(k, j, i)
+    #pragma omp target teams 
+    #pragma omp distribute // private(k, j, i)
 #elif CRPL_COMP == 0
-    #pragma omp target parallel for private(k, j, i)
+    #pragma omp target teams 
+    #pragma omp distribute // private(k, j, i)
 #endif
     for (k = 1; k < nz-1; k++) {
       for (j = jst; j <= jend; j++) {
@@ -248,9 +241,6 @@ void ssor(int niter)
         }
       }
     }
-
-    // TODO JOSE REMOVE THIS 
-    #pragma omp target update from(u) 
 
     if (timeron) timer_stop(t_add);
 
@@ -294,7 +284,6 @@ void ssor(int niter)
     //---------------------------------------------------------------------
     if ( ((istep % inorm ) == 0 ) || ( istep == itmax ) ) {
       if (timeron) timer_start(t_l2norm);
-#pragma omp target update to(rsd) 
       l2norm( ISIZ1, ISIZ2, ISIZ3, nx0, ny0, nz0,
           ist, iend, jst, jend);
 #pragma omp target update from(rsdnm)

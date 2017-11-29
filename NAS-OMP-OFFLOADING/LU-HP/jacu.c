@@ -78,14 +78,16 @@ void jacu(int l)
   c1345 = C1 * C3 * C4 * C5;
   c34 = C3 * C4;
 
-#pragma omp target data map (always tofrom: jndxp, indxp, rho_i, a, b, c, d, u)
+#pragma omp target data map (alloc: a, b, c, d, u, indxp, jndxp, rho_i)
   {
 
 #ifndef CRPL_COMP
-    #pragma omp target parallel for \
+    #pragma omp target teams 
+    #pragma omp distribute // \
             private( tmp1, tmp2, tmp3, i, j, n, k)
 #elif CRPL_COMP == 0
-    #pragma omp target parallel for \
+    #pragma omp target teams 
+    #pragma omp distribute // \
             private( tmp1, tmp2, tmp3, i, j, n, k)
 #endif
     for (n = 1; n <= npl; n++) {
