@@ -97,11 +97,9 @@ void ssor(int niter)
 {
 
 #ifndef CRPL_COMP
-    #pragma omp target teams
-    #pragma omp distribute // private (l)
 #elif CRPL_COMP == 0
-    #pragma omp target teams
-    #pragma omp distribute // private (l)
+    #pragma omp target teams map(alloc: a,b,c,d)
+    #pragma omp distribute parallel for private(l, m, n)
 #endif
   for (l = 0; l < ISIZ1*ISIZ2; l++) {
     for (n = 0; n < 5; n++) {
@@ -177,11 +175,10 @@ void ssor(int niter)
       num_workers = 32;
 
 #ifndef CRPL_COMP
-    #pragma omp target teams 
-    #pragma omp distribute // private (k, j, i)
 #elif CRPL_COMP == 0
-    #pragma omp target teams 
-    #pragma omp distribute // private (k, j, i)
+    #pragma omp target teams map (alloc: rsd) \
+    num_teams(nz-2)
+    #pragma omp distribute parallel for collapse(3) // private (k, j, i)
 #endif
     for (k = 1; k < nz - 1; k++) {
       for (j = jst; j <= jend; j++) {
@@ -224,8 +221,9 @@ void ssor(int niter)
     #pragma omp target teams 
     #pragma omp distribute // private(k, j, i)
 #elif CRPL_COMP == 0
-    #pragma omp target teams 
-    #pragma omp distribute // private(k, j, i)
+    #pragma omp target teams map (alloc: u, rsd) \
+    num_teams(nz-2)
+    #pragma omp distribute parallel for collapse(3) // private(k, j, i)
 #endif
     for (k = 1; k < nz-1; k++) {
       for (j = jst; j <= jend; j++) {

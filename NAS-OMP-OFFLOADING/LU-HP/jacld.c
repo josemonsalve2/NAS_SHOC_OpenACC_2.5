@@ -79,16 +79,13 @@ void jacld(int l)
   c34 = C3 * C4;
 
 #pragma omp target data map(alloc: a, b, c, d, u, indxp, jndxp, rho_i, qs)
-{
+#pragma omp target teams map (alloc: a, b, c, d, u, indxp, jndxp, rho_i, qs) \
+        num_teams((npl+127)/128)
+  {
 
 #ifndef CRPL_COMP
-    #pragma omp target teams 
-    #pragma omp distribute // \
-            private( tmp1, tmp2, tmp3, i, j, n, k)
 #elif CRPL_COMP == 0
-    #pragma omp target teams 
-    #pragma omp distribute // \
-            private( tmp1, tmp2, tmp3, i, j, n, k)
+    #pragma omp distribute parallel for private( tmp1, tmp2, tmp3, i, j, n, k)
 #endif
     for (n = 1; n <= npl; n++) {
       j = jndxp[l][n];

@@ -79,18 +79,19 @@ void jacu(int l)
   c34 = C3 * C4;
 
 #pragma omp target data map (alloc: a, b, c, d, u, indxp, jndxp, rho_i)
+#pragma omp target teams map (alloc: a, b, c, d, u, indxp, jndxp, rho_i) \
+        num_teams((npl+127)/128)
   {
-
+int nonsense;
 #ifndef CRPL_COMP
-    #pragma omp target teams 
-    #pragma omp distribute // \
-            private( tmp1, tmp2, tmp3, i, j, n, k)
 #elif CRPL_COMP == 0
-    #pragma omp target teams 
-    #pragma omp distribute // \
-            private( tmp1, tmp2, tmp3, i, j, n, k)
 #endif
-    for (n = 1; n <= npl; n++) {
+    #pragma omp distribute private(nonsense)
+    for (nonsense = 0; nonsense < (npl+127)/128; nonsense++) {
+        int lowerLim = 1 + nonsense*128;
+        int upperLim = nonsense*128 + min (128,npl - nonsense*128);
+    #pragma omp parallel for private(tmp1, tmp2, tmp3, i, j, n, k) schedule(static,1)
+    for (n = lowerLim; n <= upperLim; n++) {
       j = jndxp[l][n];
       i = indxp[l][n];
       k = l - i - j;
@@ -392,6 +393,7 @@ void jacu(int l)
           * ( C1 * ( u[3][k+1][j][i] * tmp1 ) )
           - dt * tz1 * c1345 * tmp1
           - dt * tz1 * dz5;
+        }
     }
   } // end of omp target data
 }

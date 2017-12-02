@@ -113,8 +113,8 @@ ifeq ($(CC), clang)
         CLINKFLAGS := $(CLINKFLAGS) -fopenmp=libomp
     else 
         ifeq ($(PXM), omp_offloading)
-            CFLAGS := $(CFLAGS) -fopenmp -fopenmp-targets=$(TA)
-            CLINKFLAGS := $(CLINKFLAGS) -fopenmp -fopenmp-targets=$(TA)
+            CFLAGS := $(CFLAGS) -fopenmp -fopenmp-targets=$(TA) -mcmodel=medium
+            CLINKFLAGS := $(CLINKFLAGS) -fopenmp -fopenmp-targets=$(TA) -mcmodel=medium
         endif
     endif
 endif

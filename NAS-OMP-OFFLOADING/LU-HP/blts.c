@@ -81,15 +81,14 @@ void blts (int ldmx, int ldmy, int ldmz, int nx, int ny, int nz, int l,
   int npl = np[l];
 
 #pragma omp target data map(alloc: a, b, c, d, indxp, jndxp, tv, rsd, tmat)
+#pragma omp target teams map(alloc: a, b, c, d, indxp, jndxp, tv, rsd, tmat)\
+        num_teams((npl+127)/128)
   {
     
 
 #ifndef CRPL_COMP
-    #pragma omp target teams 
-    #pragma omp distribute // private (n, j, i, k)
 #elif CRPL_COMP == 0
-    #pragma omp target teams 
-    #pragma omp distribute // private (n, j, i, k)
+    #pragma omp distribute parallel for private (n, j, i, k)
 #endif    
 for (n = 1; n <= npl; n++) {
       j = jndxp[l][n];
@@ -106,11 +105,8 @@ for (n = 1; n <= npl; n++) {
     }
 
 #ifndef CRPL_COMP
-    #pragma omp target teams 
-    #pragma omp distribute // private (n, i, j, k, tmp1, tmp)
 #elif CRPL_COMP == 0
-    #pragma omp target teams 
-    #pragma omp distribute // private (n, i, j, k, tmp1, tmp)
+    #pragma omp distribute parallel for private (n, i, j, k, tmp1, tmp)
 #endif
     for (n = 1; n <= npl; n++) {
       j = jndxp[l][n];
