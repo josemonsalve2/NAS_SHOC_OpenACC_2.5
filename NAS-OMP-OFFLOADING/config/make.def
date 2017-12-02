@@ -66,7 +66,7 @@ endif
 # CRAY compiler
 ifeq ($(CC), cc)
     CC = cc
-    CFLAGS = -O3
+    CFLAGS = -O0 -g
     CLINK = cc
     CLINKFLAGS = -lm
     ifeq ($(PXM), omp)
