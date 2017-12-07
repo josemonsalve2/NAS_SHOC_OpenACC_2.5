@@ -164,47 +164,47 @@ logical timeron;
 
 void omp_device_mem_init() {
   #pragma omp target enter data \
-          map (alloc: u[:5][:ISIZ3][:(ISIZ2/2*2+1)][:(ISIZ1/2*2+1)]) \
-          map (alloc: a[:5][:5][:(ISIZ1*ISIZ2)]) \
-          map (alloc: b[:5][:5][:(ISIZ1*ISIZ2)]) \
-          map (alloc: c[:5][:5][:(ISIZ1*ISIZ2)]) \
-          map (alloc: d[:5][:5][:(ISIZ1*ISIZ2)]) \
-          map (alloc: flux_G[:5][:ISIZ3][:ISIZ2][:ISIZ1]) \
-          map (alloc: indxp[:(ISIZ1+ISIZ2+ISIZ3-5)][:(ISIZ1*ISIZ2*3/4)]) \
-          map (alloc: jndxp[:(ISIZ1+ISIZ2+ISIZ3-5)][:(ISIZ1*ISIZ2*3/4)]) \
-          map (alloc: rho_i[:ISIZ3][:(ISIZ2/2*2+1)][:(ISIZ1/2*2+1)]) \
-          map (alloc: frct[:5][:ISIZ3][:(ISIZ2/2*2+1)][:(ISIZ1/2*2+1)]) \
-          map (alloc: qs[:ISIZ3][:(ISIZ2/2*2+1)][:(ISIZ1/2*2+1)]) \
-          map (alloc: rsd[:5][:ISIZ3][:(ISIZ2/2*2+1)][:(ISIZ1/2*2+1)]) \
-          map (alloc: tmat[:5][:5][:(ISIZ1*ISIZ2*3/4)]) \
-          map (alloc: tv[:5][:(ISIZ1*ISIZ2*3/4)]) \
-          map (alloc: utmp_G[:6][:ISIZ2][:ISIZ1][:ISIZ3]) \
-          map (alloc: rtmp_G[:5][:ISIZ2][:ISIZ1][:ISIZ3]) \
-          map (alloc: rsdnm[:5]) \
-          map (to: ce[:5][:13])
+          map (alloc: u[0:5][0:ISIZ3][0:(ISIZ2/2*2+1)][0:(ISIZ1/2*2+1)]) \
+          map (alloc: a[0:5][0:5][0:(ISIZ1*ISIZ2)]) \
+          map (alloc: b[0:5][0:5][0:(ISIZ1*ISIZ2)]) \
+          map (alloc: c[0:5][0:5][0:(ISIZ1*ISIZ2)]) \
+          map (alloc: d[0:5][0:5][0:(ISIZ1*ISIZ2)]) \
+          map (alloc: flux_G[0:5][0:ISIZ3][0:ISIZ2][0:ISIZ1]) \
+          map (alloc: indxp[0:(ISIZ1+ISIZ2+ISIZ3-5)][0:(ISIZ1*ISIZ2*3/4)]) \
+          map (alloc: jndxp[0:(ISIZ1+ISIZ2+ISIZ3-5)][0:(ISIZ1*ISIZ2*3/4)]) \
+          map (alloc: rho_i[0:ISIZ3][0:(ISIZ2/2*2+1)][0:(ISIZ1/2*2+1)]) \
+          map (alloc: frct[0:5][0:ISIZ3][0:(ISIZ2/2*2+1)][0:(ISIZ1/2*2+1)]) \
+          map (alloc: qs[0:ISIZ3][0:(ISIZ2/2*2+1)][0:(ISIZ1/2*2+1)]) \
+          map (alloc: rsd[0:5][0:ISIZ3][0:(ISIZ2/2*2+1)][0:(ISIZ1/2*2+1)]) \
+          map (alloc: tmat[0:5][0:5][0:(ISIZ1*ISIZ2*3/4)]) \
+          map (alloc: tv[0:5][0:(ISIZ1*ISIZ2*3/4)]) \
+          map (alloc: utmp_G[0:6][0:ISIZ2][0:ISIZ1][0:ISIZ3]) \
+          map (alloc: rtmp_G[0:5][0:ISIZ2][0:ISIZ1][0:ISIZ3]) \
+          map (alloc: rsdnm[0:5]) \
+          map (to: ce[0:5][0:13])
 }
 
 void omp_device_mem_delete() {
   #pragma omp target exit data \
-          map (delete: u[:5][:ISIZ3][:(ISIZ2/2*2+1)][:(ISIZ1/2*2+1)]) \
-          map (delete: a[:5][:5][:(ISIZ1*ISIZ2)]) \
-          map (delete: b[:5][:5][:(ISIZ1*ISIZ2)]) \
-          map (delete: c[:5][:5][:(ISIZ1*ISIZ2)]) \
-          map (delete: d[:5][:5][:(ISIZ1*ISIZ2)]) \
-          map (delete: flux_G[:5][:ISIZ3][:ISIZ2][:ISIZ1]) \
-          map (delete: indxp[:(ISIZ1+ISIZ2+ISIZ3-5)][:(ISIZ1*ISIZ2*3/4)]) \
-          map (delete: jndxp[:(ISIZ1+ISIZ2+ISIZ3-5)][:(ISIZ1*ISIZ2*3/4)]) \
-          map (delete: rho_i[:ISIZ3][:(ISIZ2/2*2+1)][:(ISIZ1/2*2+1)]) \
-          map (delete: frct[:5][:ISIZ3][:(ISIZ2/2*2+1)][:(ISIZ1/2*2+1)]) \
-          map (delete: qs[:ISIZ3][:(ISIZ2/2*2+1)][:(ISIZ1/2*2+1)]) \
-          map (delete: rsd[:5][:ISIZ3][:(ISIZ2/2*2+1)][:(ISIZ1/2*2+1)]) \
-          map (delete: tmat[:5][:5][:(ISIZ1*ISIZ2*3/4)]) \
-          map (delete: tv[:5][:(ISIZ1*ISIZ2*3/4)]) \
-          map (delete: utmp_G[:6][:ISIZ2][:ISIZ1][:ISIZ3]) \
-          map (delete: rtmp_G[:5][:ISIZ2][:ISIZ1][:ISIZ3]) \
-          map (delete: rsdnm[:5]) \
-          map (delete: ce[:5][:13])
-} /// TODO: Change rsdnm to from again
+          map (delete: u[0:5][0:ISIZ3][0:(ISIZ2/2*2+1)][0:(ISIZ1/2*2+1)]) \
+          map (delete: a[0:5][0:5][0:(ISIZ1*ISIZ2)]) \
+          map (delete: b[0:5][0:5][0:(ISIZ1*ISIZ2)]) \
+          map (delete: c[0:5][0:5][0:(ISIZ1*ISIZ2)]) \
+          map (delete: d[0:5][0:5][0:(ISIZ1*ISIZ2)]) \
+          map (delete: flux_G[0:5][0:ISIZ3][0:ISIZ2][0:ISIZ1]) \
+          map (delete: indxp[0:(ISIZ1+ISIZ2+ISIZ3-5)][0:(ISIZ1*ISIZ2*3/4)]) \
+          map (delete: jndxp[0:(ISIZ1+ISIZ2+ISIZ3-5)][0:(ISIZ1*ISIZ2*3/4)]) \
+          map (delete: rho_i[0:ISIZ3][0:(ISIZ2/2*2+1)][0:(ISIZ1/2*2+1)]) \
+          map (delete: frct[0:5][0:ISIZ3][0:(ISIZ2/2*2+1)][0:(ISIZ1/2*2+1)]) \
+          map (delete: qs[0:ISIZ3][0:(ISIZ2/2*2+1)][0:(ISIZ1/2*2+1)]) \
+          map (delete: rsd[0:5][0:ISIZ3][0:(ISIZ2/2*2+1)][0:(ISIZ1/2*2+1)]) \
+          map (delete: tmat[0:5][0:5][0:(ISIZ1*ISIZ2*3/4)]) \
+          map (delete: tv[0:5][0:(ISIZ1*ISIZ2*3/4)]) \
+          map (delete: utmp_G[0:6][0:ISIZ2][0:ISIZ1][0:ISIZ3]) \
+          map (delete: rtmp_G[0:5][0:ISIZ2][0:ISIZ1][0:ISIZ3]) \
+          map (delete: rsdnm[0:5]) \
+          map (delete: ce[0:5][0:13])
+} // TODO: Change rsdnm to from again
 
 int main(int argc, char *argv[])
 {
@@ -263,7 +263,7 @@ int main(int argc, char *argv[])
   // set the initial values for dependent variables
   //---------------------------------------------------------------------
   setiv();
-#pragma omp target update to(u[:5][:ISIZ3][:(ISIZ2/2*2+1)][:(ISIZ1/2*2+1)])
+#pragma omp target update to(u[0:5][0:ISIZ3][0:(ISIZ2/2*2+1)][0:(ISIZ1/2*2+1)])
   //---------------------------------------------------------------------
   // compute the forcing term based on prescribed exact solution
   //---------------------------------------------------------------------
@@ -279,7 +279,7 @@ int main(int argc, char *argv[])
   //---------------------------------------------------------------------
   setbv();
   setiv();
- #pragma omp target update to(u[:5][:ISIZ3][:(ISIZ2/2*2+1)][:(ISIZ1/2*2+1)])
+ #pragma omp target update to(u[0:5][0:ISIZ3][0:(ISIZ2/2*2+1)][0:(ISIZ1/2*2+1)])
 
   //---------------------------------------------------------------------
   // perform the SSOR iterations
@@ -290,7 +290,7 @@ int main(int argc, char *argv[])
   //---------------------------------------------------------------------
   // compute the solution error
   //---------------------------------------------------------------------
-#pragma omp target update from(u[:5][:ISIZ3][:(ISIZ2/2*2+1)][:(ISIZ1/2*2+1)])
+#pragma omp target update from(u[0:5][0:ISIZ3][0:(ISIZ2/2*2+1)][0:(ISIZ1/2*2+1)])
   error();
 
   //---------------------------------------------------------------------
