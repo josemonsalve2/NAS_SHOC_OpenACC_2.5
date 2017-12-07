@@ -66,7 +66,7 @@ endif
 # CRAY compiler
 ifeq ($(CC), cc)
     CC = cc
-    CFLAGS = -O0 -g
+    CFLAGS = -O2 -g
     CLINK = cc
     CLINKFLAGS = -lm
     ifeq ($(PXM), omp)
@@ -74,8 +74,9 @@ ifeq ($(CC), cc)
         CLINKFLAGS := $(CLINKFLAGS) -fopenmp
     else 
         ifeq ($(PXM), omp_offloading)
-            CFLAGS := $(CFLAGS)
-            CLINKFLAGS := $(CLINKFLAGS)
+            CFLAGS := $(CFLAGS) -homp
+            CLINKFLAGS := $(CLINKFLAGS) -fopenmp
+
         endif
     endif
 endif
