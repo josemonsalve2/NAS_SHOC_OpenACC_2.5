@@ -202,8 +202,8 @@ void omp_device_mem_delete() {
           map (delete: tv[0:5][0:(ISIZ1*ISIZ2*3/4)]) \
           map (delete: utmp_G[0:6][0:ISIZ2][0:ISIZ1][0:ISIZ3]) \
           map (delete: rtmp_G[0:5][0:ISIZ2][0:ISIZ1][0:ISIZ3]) \
-          map (delete: rsdnm[0:5]) \
-          map (delete: ce[0:5][0:13])
+          map (delete: ce[0:5][0:13]) \
+          map (from: rsdnm[0:5]) 
 } // TODO: Change rsdnm to from again
 
 int main(int argc, char *argv[])

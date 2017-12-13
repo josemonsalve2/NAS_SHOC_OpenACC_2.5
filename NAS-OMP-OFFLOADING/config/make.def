@@ -110,12 +110,30 @@ ifeq ($(CC), clang)
     CLINKFLAGS = -O3 -g
     
     ifeq ($(PXM), omp)
-        CFLAGS := $(CFLAGS) -fopenmp=libomp
-        CLINKFLAGS := $(CLINKFLAGS) -fopenmp=libomp
+        CFLAGS := $(CFLAGS) -fopenmp
+        CLINKFLAGS := $(CLINKFLAGS) -fopenmp
     else 
         ifeq ($(PXM), omp_offloading)
             CFLAGS := $(CFLAGS) -fopenmp -fopenmp-targets=$(TA) -mcmodel=medium
             CLINKFLAGS := $(CLINKFLAGS) -fopenmp -fopenmp-targets=$(TA) -mcmodel=medium
+        endif
+    endif
+endif
+
+# Clang compiler
+ifeq ($(CC), xlc)
+    CC = xlc
+    CFLAGS = -O3 -g
+    CLINK = xlc
+    CLINKFLAGS = -O3 -g
+    
+    ifeq ($(PXM), omp)
+        CFLAGS := $(CFLAGS) -qsmp=omp
+        CLINKFLAGS := $(CLINKFLAGS) -qsmp=omp
+    else 
+        ifeq ($(PXM), omp_offloading)
+        CFLAGS := $(CFLAGS) -qsmp=omp -qoffload
+        CLINKFLAGS := $(CLINKFLAGS) -qsmp=omp -qoffload
         endif
     endif
 endif
