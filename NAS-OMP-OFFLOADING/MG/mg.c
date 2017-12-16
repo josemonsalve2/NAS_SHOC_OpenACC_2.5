@@ -69,7 +69,7 @@
 //#include "randdp.h"
 #include "timers.h"
 #include "print_results.h"
-#include <openacc.h>
+#include <omp.h>
 
 #define I3D(array,n1,n2,i3,i2,i1) (array[(i3)*n2*n1 + (i2)*n1 + (i1)])
 
@@ -103,9 +103,12 @@ static void zero3(double *oz, int n1, int n2, int n3);
 // are always passed as subroutine args. 
 //-------------------------------------------------------------------------c
 /* commcon /noautom/ */
-static double u[NR];
-static double v[NR];
-static double r[NR];
+/* static double u[NR]; */
+/* static double v[NR]; */
+/* static double r[NR]; */
+static double* u;
+static double* v;
+static double* r;
 int gnr = NR;
 
 /* common /grid/ */
@@ -114,6 +117,9 @@ static int is1, is2, is3, ie1, ie2, ie3;
 
 int main()
 {
+  u = (double*) malloc(NR*sizeof(double));
+  v = (double*) malloc(NR*sizeof(double));
+  r = (double*) malloc(NR*sizeof(double));
   //-------------------------------------------------------------------------c
   // k is the current level. It is passed down through subroutine args
   // and is NOT global. it is the current iteration
@@ -135,7 +141,9 @@ int main()
   for (i = T_init; i < T_last; i++) {
     timer_clear(i);
   }
+#ifdef _OPENACC
   acc_init(acc_device_default);
+#endif
   timer_start(T_init);
 
   //---------------------------------------------------------------------
@@ -245,7 +253,7 @@ int main()
   k  = lt;
   //  printf("NR=%u\n", NR);
 
-#pragma acc data create(u[0:gnr],v[0:gnr],r[0:gnr])
+#pragma omp target data map(alloc: u[0:gnr]) map(alloc: v[0:gnr]) map(alloc: r[0:gnr])
   {
     setup(&n1, &n2, &n3);
     zero3(u, n1, n2, n3);
@@ -325,6 +333,8 @@ int main()
     }
 
     err = fabs( rnm2 - verify_value ) / verify_value;
+    printf("EPSILON: %g\n", epsilon);
+    printf("err: %g, rnm2: %g, verify_value: %g\n", err, rnm2, verify_value);
     // err = fabs( rnm2 - verify_value );
     if (err <= epsilon) {
       verified = true;
@@ -376,7 +386,9 @@ int main()
       }
     }
   }
+#ifdef _OPENACC
   acc_shutdown(acc_device_default);
+#endif
   return 0;
 }
 
@@ -504,9 +516,9 @@ static void mg3P(double u[], double v[], double r[],
 static void psinv(double * __restrict__ or, double * __restrict__ ou, int n1, int n2, int n3, double c[4], int k)
 {
   /*
-  double (*r)[n2][n1] = (double (*)[n2][n1])or;
-  double (*u)[n2][n1] = (double (*)[n2][n1])ou;
-   */
+     double (*r)[n2][n1] = (double (*)[n2][n1])or;
+     double (*u)[n2][n1] = (double (*)[n2][n1])ou;
+     */
   int i3, i2, i1;
   double c0, c1, c2;
 
@@ -520,6 +532,9 @@ static void psinv(double * __restrict__ or, double * __restrict__ ou, int n1, in
 #ifdef _OPENACC
   r1 = (double*)acc_malloc(n3*n2*n1*sizeof(double));
   r2 = (double*)acc_malloc(n3*n2*n1*sizeof(double));
+#elif OPENMP_ALLOC
+  r1 = (double*)omp_target_alloc(n3*n2*n1*sizeof(double), omp_get_default_device());
+  r2 = (double*)omp_target_alloc(n3*n2*n1*sizeof(double), omp_get_default_device());
 #else
   r1 = (double*)malloc(n3*n2*n1*sizeof(double));
   r2 = (double*)malloc(n3*n2*n1*sizeof(double));
@@ -527,75 +542,69 @@ static void psinv(double * __restrict__ or, double * __restrict__ ou, int n1, in
 
 
   if (timeron) timer_start(T_psinv);
-#pragma acc data deviceptr(r1,r2) \
-        present(ou[0:n3*n2*n1]) \
-        present(or[0:n3*n2*n1])
-  {
+#pragma omp target map(tofrom: ou[0:n3*n2*n1]) map(tofrom: or[0:n3*n2*n1]) is_device_ptr(r1, r2)
 #ifndef CRPL_COMP
-#pragma acc parallel loop gang num_gangs(n3-2) num_workers(16) vector_length(64)
+#pragma omp teams distribute private(i3)
 #elif CRPL_COMP == 0
-#pragma acc kernels loop gang independent
+#pragma omp teams distribute parallel for collapse(3) private(i3,i2,i1)
 #endif
-    for (i3 = 1; i3 < n3-1; i3++) {
-#pragma acc loop worker independent
-      for (i2 = 1; i2 < n2-1; i2++) {
-#pragma acc loop vector independent
-        for (i1 = 0; i1 < n1; i1++) {
-          /*
-        r1[i1] = r[i3][i2-1][i1] + r[i3][i2+1][i1]
-               + r[i3-1][i2][i1] + r[i3+1][i2][i1];
-        r2[i1] = r[i3-1][i2-1][i1] + r[i3-1][i2+1][i1]
-               + r[i3+1][i2-1][i1] + r[i3+1][i2+1][i1];
-           */
-          I3D(r1, n1, n2, i3, i2, i1) = I3D(or, n1, n2, i3, i2-1, i1) + I3D(or, n1, n2, i3, i2+1, i1)
-			       + I3D(or, n1, n2, i3-1, i2, i1) + I3D(or, n1, n2, i3+1, i2, i1);
-          I3D(r2, n1, n2, i3, i2, i1) = I3D(or, n1, n2, i3-1, i2-1, i1) + I3D(or, n1, n2, i3-1, i2+1, i1)
-			       + I3D(or, n1, n2, i3+1, i2-1, i1) + I3D(or, n1, n2, i3+1, i2+1, i1);
-
-        }
+  for (i3 = 1; i3 < n3-1; i3++) {
+#ifndef CRPL_COMP
+#pragma omp parallel for collapse(2) private(i2,i1)
+#endif
+    for (i2 = 1; i2 < n2-1; i2++) {
+      for (i1 = 0; i1 < n1; i1++) {
+        I3D(r1, n1, n2, i3, i2, i1) = I3D(or, n1, n2, i3, i2-1, i1) + I3D(or, n1, n2, i3, i2+1, i1)
+          + I3D(or, n1, n2, i3-1, i2, i1) + I3D(or, n1, n2, i3+1, i2, i1);
+        I3D(r2, n1, n2, i3, i2, i1) = I3D(or, n1, n2, i3-1, i2-1, i1) + I3D(or, n1, n2, i3-1, i2+1, i1)
+          + I3D(or, n1, n2, i3+1, i2-1, i1) + I3D(or, n1, n2, i3+1, i2+1, i1);
+        /* r1[i1] = r[i3][i2-1][i1] + r[i3][i2+1][i1] */
+        /*   + r[i3-1][i2][i1] + r[i3+1][i2][i1]; */
+        /* r2[i1] = r[i3-1][i2-1][i1] + r[i3-1][i2+1][i1] */
+        /*   + r[i3+1][i2-1][i1] + r[i3+1][i2+1][i1]; */
       }
     }
-
+  }
+#pragma omp target map(tofrom: ou[0:n3*n2*n1]) map(tofrom: or[0:n3*n2*n1]) is_device_ptr(r1, r2)
 #ifndef CRPL_COMP
-#pragma acc parallel loop gang num_gangs(n3-2) num_workers(16) vector_length(64)
+#pragma omp teams distribute private(i3)
 #elif CRPL_COMP == 0
-#pragma acc kernels loop gang independent
+#pragma omp teams distribute parallel for collapse(3) private(i3,i2,i1)
 #endif
-    for (i3 = 1; i3 < n3-1; i3++) {
-#pragma acc loop worker independent
-      for (i2 = 1; i2 < n2-1; i2++) {
-#pragma acc loop vector independent
-        for (i1 = 1; i1 < n1-1; i1++) {
-          /*
-        u[i3][i2][i1] = u[i3][i2][i1]
-                      + c[0] * r[i3][i2][i1]
-                      + c[1] * ( r[i3][i2][i1-1] + r[i3][i2][i1+1]
-                               + r1[i1] )
-                      + c[2] * ( r2[i1] + r1[i1-1] + r1[i1+1] );
-           */
-          I3D(ou, n1, n2, i3, i2, i1) = I3D(ou, n1, n2, i3, i2, i1)
-									    + c0 * I3D(or, n1, n2, i3, i2, i1)
+  for (i3 = 1; i3 < n3-1; i3++) {
+#ifndef CRPL_COMP
+#pragma omp parallel for collapse(2) private(i2,i1)
+#endif
+    for (i2 = 1; i2 < n2-1; i2++) {
+      for (i1 = 1; i1 < n1-1; i1++) {
+        I3D(ou, n1, n2, i3, i2, i1) = I3D(ou, n1, n2, i3, i2, i1)
+          + c0 * I3D(or, n1, n2, i3, i2, i1)
           + c1 * ( I3D(or, n1, n2, i3, i2, i1-1)
               + I3D(or, n1, n2, i3, i2, i1+1)
               + I3D(r1, n1, n2, i3, i2, i1) )
-              + c2 * ( I3D(r2, n1, n2, i3, i2, i1)
-                  + I3D(r1, n1, n2, i3, i2, i1-1)
-                  + I3D(r1, n1, n2, i3, i2, i1+1));
-          //+ c[2] * ( r2[i1] + r1[i1-1] + r1[i1+1] );
-
-          //--------------------------------------------------------------------
-          // Assume c[3] = 0    (Enable line below if c[3] not= 0)
-          //--------------------------------------------------------------------
-          //            + c[3] * ( r2[i1-1] + r2[i1+1] )
-          //--------------------------------------------------------------------
-        }
+          + c2 * ( I3D(r2, n1, n2, i3, i2, i1)
+              + I3D(r1, n1, n2, i3, i2, i1-1)
+              + I3D(r1, n1, n2, i3, i2, i1+1));
+        /* u[i3][i2][i1] = u[i3][i2][i1] */
+        /*   + c[0] * r[i3][i2][i1] */
+        /*   + c[1] * ( r[i3][i2][i1-1] + r[i3][i2][i1+1] */
+        /*       + r1[i1] ) */
+        /*   + c[2] * ( r2[i1] + r1[i1-1] + r1[i1+1] ); */
+        //--------------------------------------------------------------------
+        // Assume c[3] = 0    (Enable line below if c[3] not= 0)
+        //--------------------------------------------------------------------
+        //            + c[3] * ( r2[i1-1] + r2[i1+1] )
+        //--------------------------------------------------------------------
       }
     }
-  }/*end acc parallel*/
+  }
   if (timeron) timer_stop(T_psinv);
 #ifdef _OPENACC
   acc_free(r1);
   acc_free(r2);
+#elif OPENMP_ALLOC
+  omp_target_free(r1, omp_get_default_device());
+  omp_target_free(r2, omp_get_default_device());
 #else
   free(r1);
   free(r2);
@@ -635,10 +644,10 @@ static void resid(double * ou, double * ov, double * or, int n1, int n2, int n3,
     double a[4], int k)
 {
   /*
-  double (*u)[n2][n1] = (double (*)[n2][n1])ou;
-  double (*v)[n2][n1] = (double (*)[n2][n1])ov;
-  double (*r)[n2][n1] = (double (*)[n2][n1])or;
-   */
+     double (*u)[n2][n1] = (double (*)[n2][n1])ou;
+     double (*v)[n2][n1] = (double (*)[n2][n1])ov;
+     double (*r)[n2][n1] = (double (*)[n2][n1])or;
+     */
   int i3, i2, i1;
   double a0, a2, a3;
   //double u1[M], u2[M];
@@ -652,84 +661,75 @@ static void resid(double * ou, double * ov, double * or, int n1, int n2, int n3,
 #ifdef _OPENACC
   u1 = (double*)acc_malloc(n3*n2*n1*sizeof(double));
   u2 = (double*)acc_malloc(n3*n2*n1*sizeof(double));
+#elif OPENMP_ALLOC
+  u1 = (double*)omp_target_alloc(n3*n2*n1*sizeof(double), omp_get_default_device());
+  u2 = (double*)omp_target_alloc(n3*n2*n1*sizeof(double), omp_get_default_device());
 #else
   u1 = (double*)malloc(n3*n2*n1*sizeof(double));
   u2 = (double*)malloc(n3*n2*n1*sizeof(double));
 #endif
 
-  //	printf("n1=%d, n2=%d, n3=%d\n", n1, n2, n3);
-#pragma acc data deviceptr(u1,u2)  \
-        present(ou[0:n3*n2*n1]) \
-        present(ov[0:n3*n2*n1], or[0:n3*n2*n1])
-  {
-
+/* #pragma omp parallel for default(shared) private(i1,i2,i3,u1,u2) */
+#pragma omp target map(tofrom: ou[0:n3*n2*n1]) map(tofrom: ov[0:n3*n2*n1]) map(tofrom: or[0:n3*n2*n1]) is_device_ptr(u1, u2)
 #ifndef CRPL_COMP
-#pragma acc parallel num_gangs(n3-2) num_workers(8) vector_length(128)
+#pragma omp teams distribute private(i3)
 #elif CRPL_COMP == 0
-#pragma acc kernels
+#pragma omp teams distribute parallel for collapse(3) private(i3,i2,i1)
 #endif
-    {
-#pragma acc loop gang independent
-      for (i3 = 1; i3 < n3-1; i3++) {
-#pragma acc loop worker independent
-        for (i2 = 1; i2 < n2-1; i2++) {
-#pragma acc loop vector independent
-          for (i1 = 0; i1 < n1; i1++) {
-            /*
-        u1[i1] = u[i3][i2-1][i1] + u[i3][i2+1][i1]
-               + u[i3-1][i2][i1] + u[i3+1][i2][i1];
-        u2[i1] = u[i3-1][i2-1][i1] + u[i3-1][i2+1][i1]
-               + u[i3+1][i2-1][i1] + u[i3+1][i2+1][i1];
-             */
-            I3D(u1, n1, n2, i3, i2, i1) = I3D(ou, n1, n2, i3, i2-1, i1) + I3D(ou, n1, n2, i3, i2+1, i1)
-                   + I3D(ou, n1, n2, i3-1, i2, i1) + I3D(ou, n1, n2, i3+1, i2, i1);
-            I3D(u2, n1, n2, i3, i2, i1) = I3D(ou, n1, n2, i3-1, i2-1, i1) + I3D(ou, n1, n2, i3-1, i2+1, i1)
-                   + I3D(ou, n1, n2, i3+1, i2-1, i1) + I3D(ou, n1, n2, i3+1, i2+1, i1);
-
-          }
-        }
+  for (i3 = 1; i3 < n3-1; i3++) {
+#ifndef CRPL_COMP
+#pragma omp parallel for collapse(2) private(i2,i1)
+#endif
+    for (i2 = 1; i2 < n2-1; i2++) {
+      for (i1 = 0; i1 < n1; i1++) {
+        I3D(u1, n1, n2, i3, i2, i1) = I3D(ou, n1, n2, i3, i2-1, i1) + I3D(ou, n1, n2, i3, i2+1, i1)
+          + I3D(ou, n1, n2, i3-1, i2, i1) + I3D(ou, n1, n2, i3+1, i2, i1);
+        I3D(u2, n1, n2, i3, i2, i1) = I3D(ou, n1, n2, i3-1, i2-1, i1) + I3D(ou, n1, n2, i3-1, i2+1, i1)
+          + I3D(ou, n1, n2, i3+1, i2-1, i1) + I3D(ou, n1, n2, i3+1, i2+1, i1);
+        /* u1[i1] = u[i3][i2-1][i1] + u[i3][i2+1][i1] */
+        /*   + u[i3-1][i2][i1] + u[i3+1][i2][i1]; */
+        /* u2[i1] = u[i3-1][i2-1][i1] + u[i3-1][i2+1][i1] */
+        /*   + u[i3+1][i2-1][i1] + u[i3+1][i2+1][i1]; */
       }
     }
-
+  }
+#pragma omp target map(tofrom: ou[0:n3*n2*n1]) map(tofrom: ov[0:n3*n2*n1]) map(tofrom: or[0:n3*n2*n1]) is_device_ptr(u1, u2)
 #ifndef CRPL_COMP
-#pragma acc parallel num_gangs(n3-2) num_workers(8) vector_length(128)
+#pragma omp teams distribute private(i3)
 #elif CRPL_COMP == 0
-#pragma acc kernels
+#pragma omp teams distribute parallel for collapse(3) private(i3,i2,i1)
 #endif
-    {
-#pragma acc loop gang independent
-      for (i3 = 1; i3 < n3-1; i3++) {
-#pragma acc loop worker independent
-        for (i2 = 1; i2 < n2-1; i2++) {
-#pragma acc loop vector independent
-          for (i1 = 1; i1 < n1-1; i1++) {
-            /*
-        r[i3][i2][i1] = v[i3][i2][i1]
-                      - a[0] * u[i3][i2][i1]
-             */
-            I3D(or, n1, n2, i3, i2, i1) = I3D(ov, n1, n2, i3, i2, i1)
-							     -a0 * I3D(ou, n1, n2, i3, i2, i1)
-
-            //-------------------------------------------------------------------
-            //  Assume a[1] = 0      (Enable 2 lines below if a[1] not= 0)
-            //-------------------------------------------------------------------
-            //            - a[1] * ( u[i3][i2][i1-1] + u[i3][i2][i1+1]
-            //                     + u1[i1] )
-            //-------------------------------------------------------------------
-            // - a[2] * ( u2[i3][i2][i1] + u1[i3][i2][i1-1] + u1[i3][i2][i1+1] )
-            // - a[3] * ( u2[i3][i2][i1-1] + u2[i3][i2][i1+1] );
-            - a2 * ( I3D(u2, n1, n2, i3, i2, i1) + I3D(u1, n1, n2, i3, i2, i1-1)
-                + I3D(u1, n1, n2, i3, i2, i1+1))
-                - a3 * ( I3D(u2, n1, n2, i3, i2, i1-1) + I3D(u2, n1, n2, i3, i2, i1+1));
-          }
-        }
+  for (i3 = 1; i3 < n3-1; i3++) {
+#ifndef CRPL_COMP
+#pragma omp parallel for collapse(2) private(i2,i1)
+#endif
+    for (i2 = 1; i2 < n2-1; i2++) {
+      for (i1 = 1; i1 < n1-1; i1++) {
+        I3D(or, n1, n2, i3, i2, i1) = I3D(ov, n1, n2, i3, i2, i1)
+          -a0 * I3D(ou, n1, n2, i3, i2, i1)
+        /* r[i3][i2][i1] = v[i3][i2][i1] */
+        /*   - a[0] * u[i3][i2][i1] */
+          //-------------------------------------------------------------------
+          //  Assume a[1] = 0      (Enable 2 lines below if a[1] not= 0)
+          //-------------------------------------------------------------------
+          //            - a[1] * ( u[i3][i2][i1-1] + u[i3][i2][i1+1]
+          //                     + u1[i1] )
+          //-------------------------------------------------------------------
+          - a2 * ( I3D(u2, n1, n2, i3, i2, i1) + I3D(u1, n1, n2, i3, i2, i1-1)
+              + I3D(u1, n1, n2, i3, i2, i1+1))
+          - a3 * ( I3D(u2, n1, n2, i3, i2, i1-1) + I3D(u2, n1, n2, i3, i2, i1+1));
+          /* - a[2] * ( u2[i1] + u1[i1-1] + u1[i1+1] ) */
+          /* - a[3] * ( u2[i1-1] + u2[i1+1] ); */
       }
-    } /*end acc parallel */
-  } /*end acc data */
+    }
+  }
 
 #ifdef _OPENACC
   acc_free(u1);
   acc_free(u2);
+#elif OPENMP_ALLOC
+  omp_target_free(u1, omp_get_default_device());
+  omp_target_free(u2, omp_get_default_device());
 #else
   free(u1);
   free(u2);
@@ -767,9 +767,9 @@ static void rprj3(double *or, int m1k, int m2k, int m3k,
     double *os, int m1j, int m2j, int m3j, int k)
 {
   /*
-  double (*r)[m2k][m1k] = (double (*)[m2k][m1k])or;
-  double (*s)[m2j][m1j] = (double (*)[m2j][m1j])os;
-   */
+     double (*r)[m2k][m1k] = (double (*)[m2k][m1k])or;
+     double (*s)[m2j][m1j] = (double (*)[m2j][m1j])os;
+     */
   int j3, j2, j1, i3, i2, i1, d1, d2, d3, j;
 
   //double x1[M], y1[M], x2, y2;
@@ -777,6 +777,9 @@ static void rprj3(double *or, int m1k, int m2k, int m3k,
 #ifdef _OPENACC
   x1 = (double*)acc_malloc(m3k*m2k*m1k*sizeof(double));
   y1 = (double*)acc_malloc(m3k*m2k*m1k*sizeof(double));
+#elif OPENMP_ALLOC
+  x1 = (double*)omp_target_alloc(m3k*m2k*m1k*sizeof(double), omp_get_default_device());
+  y1 = (double*)omp_target_alloc(m3k*m2k*m1k*sizeof(double), omp_get_default_device());
 #else
   x1 = (double*)malloc(m3k*m2k*m1k*sizeof(double));
   y1 = (double*)malloc(m3k*m2k*m1k*sizeof(double));
@@ -800,77 +803,60 @@ static void rprj3(double *or, int m1k, int m2k, int m3k,
   } else {
     d3 = 1;
   }
-
-#pragma acc data deviceptr(x1,y1) \
-        present(or[0:m3k*m2k*m1k]) \
-        present(os[0:m3j*m2j*m1j])
-  {
-
-#ifndef CRPL_COMP
-#pragma acc parallel loop gang num_gangs(m3j-2) num_workers(8) vector_length(128)
-#elif CRPL_COMP == 0
-#pragma acc kernels loop gang independent
-#endif
-    for (j3 = 1; j3 < m3j-1; j3++) {
-      i3 = 2*j3-d3;
-#pragma acc loop worker independent
-      for (j2 = 1; j2 < m2j-1; j2++) {
+/* #pragma omp parallel for default(shared) private(j1,j2,j3,i1,i2,i3,x2,y2) */
+#pragma omp target is_device_ptr(x1, y1) map(tofrom: or[0:m3k*m2k*m1k]) map(tofrom: os[0:m3j*m2j*m1j]) 
+#pragma omp teams distribute parallel for default(shared) private(j1,j2,j3,i1,i2,i3) collapse(3)
+  for (j3 = 1; j3 < m3j-1; j3++) {
+    for (j2 = 1; j2 < m2j-1; j2++) {
+      for (j1 = 1; j1 < m1j; j1++) {
+        i3 = 2*j3-d3;
         i2 = 2*j2-d2;
-#pragma acc loop vector independent
-        for (j1 = 1; j1 < m1j; j1++) {
-          i1 = 2*j1-d1;
-          /*
-        x1[i1] = r[i3+1][i2  ][i1] + r[i3+1][i2+2][i1]
-               + r[i3  ][i2+1][i1] + r[i3+2][i2+1][i1];
-        y1[i1] = r[i3  ][i2  ][i1] + r[i3+2][i2  ][i1]
-               + r[i3  ][i2+2][i1] + r[i3+2][i2+2][i1];
-           */
-          I3D(x1, m1k, m2k, i3, i2, i1) = I3D(or, m1k, m2k, i3+1, i2, i1) + I3D(or, m1k, m2k, i3+1, i2+2, i1)
-		           + I3D(or, m1k, m2k, i3, i2+1, i1) + I3D(or, m1k, m2k, i3+2, i2+1, i1);
-          I3D(y1, m1k, m2k, i3, i2, i1) = I3D(or, m1k, m2k, i3, i2, i1)   + I3D(or, m1k, m2k, i3+2, i2, i1)
-		           + I3D(or, m1k, m2k, i3, i2+2, i1) + I3D(or, m1k, m2k, i3+2, i2+2, i1);
+        i1 = 2*j1-d1;
 
-        }
+        I3D(x1, m1k, m2k, i3, i2, i1) = I3D(or, m1k, m2k, i3+1, i2, i1) + I3D(or, m1k, m2k, i3+1, i2+2, i1)
+          + I3D(or, m1k, m2k, i3, i2+1, i1) + I3D(or, m1k, m2k, i3+2, i2+1, i1);
+        I3D(y1, m1k, m2k, i3, i2, i1) = I3D(or, m1k, m2k, i3, i2, i1)   + I3D(or, m1k, m2k, i3+2, i2, i1)
+          + I3D(or, m1k, m2k, i3, i2+2, i1) + I3D(or, m1k, m2k, i3+2, i2+2, i1);
+
+        /* x1[i1] = r[i3+1][i2  ][i1] + r[i3+1][i2+2][i1] */
+        /*   + r[i3  ][i2+1][i1] + r[i3+2][i2+1][i1]; */
+        /* y1[i1] = r[i3  ][i2  ][i1] + r[i3+2][i2  ][i1] */
+        /*   + r[i3  ][i2+2][i1] + r[i3+2][i2+2][i1]; */
       }
     }
-
-#ifndef CRPL_COMP
-#pragma acc parallel loop gang num_gangs(m3j-2) num_workers(8) vector_length(128)
-#elif CRPL_COMP == 0
-#pragma acc kernels loop gang independent
-#endif
-    for (j3 = 1; j3 < m3j-1; j3++) {
-      i3 = 2*j3-d3;
-#pragma acc loop worker independent
-      for (j2 = 1; j2 < m2j-1; j2++) {
+  }
+#pragma omp target is_device_ptr(x1, y1) map(tofrom: or[0:m3k*m2k*m1k]) map(tofrom: os[0:m3j*m2j*m1j]) 
+#pragma omp teams distribute parallel for default(shared) private(j1,j2,j3,i1,i2,i3,x2,y2) collapse(3)
+  for (j3 = 1; j3 < m3j-1; j3++) {
+    for (j2 = 1; j2 < m2j-1; j2++) {
+      for (j1 = 1; j1 < m1j-1; j1++) {
+        i3 = 2*j3-d3;
         i2 = 2*j2-d2;
-#pragma acc loop vector independent
-        for (j1 = 1; j1 < m1j-1; j1++) {
-          i1 = 2*j1-d1;
-          /*
-        y2 = r[i3  ][i2  ][i1+1] + r[i3+2][i2  ][i1+1]
-           + r[i3  ][i2+2][i1+1] + r[i3+2][i2+2][i1+1];
-        x2 = r[i3+1][i2  ][i1+1] + r[i3+1][i2+2][i1+1]
-           + r[i3  ][i2+1][i1+1] + r[i3+2][i2+1][i1+1];
-        s[j3][j2][j1] =
-                0.5 * r[i3+1][i2+1][i1+1]
-              + 0.25 * (r[i3+1][i2+1][i1] + r[i3+1][i2+1][i1+2] + x2)
-              + 0.125 * (x1[i1] + x1[i1+2] + y2)
-              + 0.0625 * (y1[i1] + y1[i1+2]);
-           */
-          y2 = I3D(or, m1k, m2k, i3, i2, i1+1)   + I3D(or, m1k, m2k, i3+2, i2, i1+1)
-		       + I3D(or, m1k, m2k, i3, i2+2, i1+1) + I3D(or, m1k, m2k, i3+2, i2+2, i1+1);
-          x2 = I3D(or, m1k, m2k, i3+1, i2, i1+1) + I3D(or, m1k, m2k, i3+1, i2+2, i1+1)
-		       + I3D(or, m1k, m2k, i3, i2+1, i1+1) + I3D(or, m1k, m2k, i3+2, i2+1, i1+1);
-          I3D(os, m1j, m2j, j3, j2, j1) =
-              0.5 * I3D(or, m1k, m2k, i3+1, i2+1, i1+1)
+        i1 = 2*j1-d1;
+
+        y2 = I3D(or, m1k, m2k, i3, i2, i1+1)   + I3D(or, m1k, m2k, i3+2, i2, i1+1)
+          + I3D(or, m1k, m2k, i3, i2+2, i1+1) + I3D(or, m1k, m2k, i3+2, i2+2, i1+1);
+        x2 = I3D(or, m1k, m2k, i3+1, i2, i1+1) + I3D(or, m1k, m2k, i3+1, i2+2, i1+1)
+          + I3D(or, m1k, m2k, i3, i2+1, i1+1) + I3D(or, m1k, m2k, i3+2, i2+1, i1+1);
+        I3D(os, m1j, m2j, j3, j2, j1) =
+          0.5 * I3D(or, m1k, m2k, i3+1, i2+1, i1+1)
           + 0.25 * (I3D(or, m1k, m2k, i3+1, i2+1, i1) + I3D(or, m1k, m2k, i3+1, i2+1, i1+2) + x2)
           + 0.125 * ( I3D(x1, m1k, m2k, i3, i2, i1)+ I3D(x1, m1k, m2k, i3, i2, i1+2) + y2)
           + 0.0625 * (I3D(y1, m1k, m2k, i3, i2, i1) + I3D(y1, m1k, m2k, i3, i2, i1+2));
-        }
+
+        /* y2 = r[i3  ][i2  ][i1+1] + r[i3+2][i2  ][i1+1] */
+        /*   + r[i3  ][i2+2][i1+1] + r[i3+2][i2+2][i1+1]; */
+        /* x2 = r[i3+1][i2  ][i1+1] + r[i3+1][i2+2][i1+1] */
+        /*   + r[i3  ][i2+1][i1+1] + r[i3+2][i2+1][i1+1]; */
+        /* s[j3][j2][j1] = */
+        /*   0.5 * r[i3+1][i2+1][i1+1] */
+        /*   + 0.25 * (r[i3+1][i2+1][i1] + r[i3+1][i2+1][i1+2] + x2) */
+        /*   + 0.125 * (x1[i1] + x1[i1+2] + y2) */
+        /*   + 0.0625 * (y1[i1] + y1[i1+2]); */
       }
     }
-  }/*end acc parallel*/
+  }
+
   if (timeron) timer_stop(T_rprj3);
 
   j = k-1;
@@ -889,6 +875,9 @@ static void rprj3(double *or, int m1k, int m2k, int m3k,
 #ifdef _OPENACC
   acc_free(x1);
   acc_free(y1);
+#elif OPENMP_ALLOC
+  omp_target_free(x1, omp_get_default_device());
+  omp_target_free(y1, omp_get_default_device());
 #else
   free(x1);
   free(y1);
@@ -910,9 +899,9 @@ static void interp(double *oz, int mm1, int mm2, int mm3,
     double *ou, int n1, int n2, int n3, int k)
 {
   /*
-  double (*z)[mm2][mm1] = (double (*)[mm2][mm1])oz;
-  double (*u)[n2][n1] = (double (*)[n2][n1])ou;
-   */
+     double (*z)[mm2][mm1] = (double (*)[mm2][mm1])oz;
+     double (*u)[n2][n1] = (double (*)[n2][n1])ou;
+     */
   int i3, i2, i1, d1, d2, d3, t1, t2, t3;
 
   // note that m = 1037 in globals.h but for this only need to be
@@ -929,6 +918,10 @@ static void interp(double *oz, int mm1, int mm2, int mm3,
   z2 = (double*)acc_malloc(mm3*mm2*mm1*sizeof(double));
   //if(z3 == NULL)
   z3 = (double*)acc_malloc(mm3*mm2*mm1*sizeof(double));
+#elif OPENMP_ALLOC
+  z1 = (double*)omp_target_alloc(mm3*mm2*mm1*sizeof(double), omp_get_default_device());
+  z2 = (double*)omp_target_alloc(mm3*mm2*mm1*sizeof(double), omp_get_default_device());
+  z3 = (double*)omp_target_alloc(mm3*mm2*mm1*sizeof(double), omp_get_default_device());
 #else
   z1 = (double*)malloc(mm3*mm2*mm1*sizeof(double));
   z2 = (double*)malloc(mm3*mm2*mm1*sizeof(double));
@@ -937,372 +930,334 @@ static void interp(double *oz, int mm1, int mm2, int mm3,
 
   if (timeron) timer_start(T_interp);
 
-#pragma acc data deviceptr(z1,z2,z3) \
-        present(oz[0:mm3*mm2*mm1]) \
-        present(ou[0:n3*n2*n1])
-  {
-
-    if (n1 != 3 && n2 != 3 && n3 != 3) {
-
+  if (n1 != 3 && n2 != 3 && n3 != 3) {
+#pragma omp target is_device_ptr(z1, z2, z3) map(tofrom: oz[0:mm3*mm2*mm1]) map(tofrom: ou[0:n3*n2*n1])
 #ifndef CRPL_COMP
-#pragma acc parallel loop gang num_gangs(mm3-1) num_workers(8) vector_length(128)
+#pragma omp teams distribute  private(i3)
 #elif CRPL_COMP == 0
-#pragma acc kernels loop gang independent
+#pragma omp teams distribute parallel for collapse(3) private(i3,i2,i1)
 #endif
-      for (i3 = 0; i3 < mm3-1; i3++) {
-#pragma acc loop worker independent
-        for (i2 = 0; i2 < mm2-1; i2++) {
-#pragma acc loop vector independent
-          for (i1 = 0; i1 < mm1; i1++) {
-            /*
-          z1[i1] = z[i3][i2+1][i1] + z[i3][i2][i1];
-          z2[i1] = z[i3+1][i2][i1] + z[i3][i2][i1];
-          z3[i1] = z[i3+1][i2+1][i1] + z[i3+1][i2][i1] + z1[i1];
-             */
-            I3D(z1, mm1, mm2, i3, i2, i1) = I3D(oz, mm1, mm2, i3, i2+1, i1)
-		  								    + I3D(oz, mm1, mm2, i3, i2, i1);
-            I3D(z2, mm1, mm2, i3, i2, i1) = I3D(oz, mm1, mm2, i3+1, i2, i1)
-		  								    + I3D(oz, mm1, mm2, i3, i2, i1);
-            I3D(z3, mm1, mm2, i3, i2, i1) = I3D(oz, mm1, mm2, i3+1, i2+1, i1)
-		  								    + I3D(oz, mm1, mm2, i3+1, i2, i1)
-		  								    + I3D(z1, mm1, mm2, i3, i2, i1);
-
-          }
+    for (i3 = 0; i3 < mm3-1; i3++) {
+#ifndef CRPL_COMP
+#pragma omp parallel for collapse(2) private(i2,i1)
+#endif
+      for (i2 = 0; i2 < mm2-1; i2++) {
+        for (i1 = 0; i1 < mm1; i1++) {
+          /* z1[i1] = z[i3][i2+1][i1] + z[i3][i2][i1]; */
+          /* z2[i1] = z[i3+1][i2][i1] + z[i3][i2][i1]; */
+          /* z3[i1] = z[i3+1][i2+1][i1] + z[i3+1][i2][i1] + z1[i1]; */
+          I3D(z1, mm1, mm2, i3, i2, i1) = I3D(oz, mm1, mm2, i3, i2+1, i1)
+            + I3D(oz, mm1, mm2, i3, i2, i1);
+          I3D(z2, mm1, mm2, i3, i2, i1) = I3D(oz, mm1, mm2, i3+1, i2, i1)
+            + I3D(oz, mm1, mm2, i3, i2, i1);
+          I3D(z3, mm1, mm2, i3, i2, i1) = I3D(oz, mm1, mm2, i3+1, i2+1, i1)
+            + I3D(oz, mm1, mm2, i3+1, i2, i1)
+            + I3D(z1, mm1, mm2, i3, i2, i1);
         }
       }
-
-#ifndef CRPL_COMP
-#pragma acc parallel loop gang num_gangs(mm3-1) num_workers(8) vector_length(128)
-#elif CRPL_COMP == 0
-#pragma acc kernels loop gang independent
-#endif
-      for (i3 = 0; i3 < mm3-1; i3++) {
-#pragma acc loop worker independent
-        for (i2 = 0; i2 < mm2-1; i2++) {
-#pragma acc loop vector independent
-          for (i1 = 0; i1 < mm1-1; i1++) {
-            /*
-          u[2*i3][2*i2][2*i1] = u[2*i3][2*i2][2*i1]
-                              + z[i3][i2][i1];
-          u[2*i3][2*i2][2*i1+1] = u[2*i3][2*i2][2*i1+1]
-                                + 0.5 * (z[i3][i2][i1+1] + z[i3][i2][i1]);
-             */
-            I3D(ou, n1, n2, 2*i3, 2*i2, 2*i1)   = I3D(ou, n1, n2, 2*i3, 2*i2, 2*i1)
-		  									      + I3D(oz, mm1, mm2, i3, i2, i1);
-            I3D(ou, n1, n2, 2*i3, 2*i2, 2*i1+1) = I3D(ou, n1, n2, 2*i3, 2*i2, 2*i1+1)
-		  									      + 0.5*(I3D(oz, mm1, mm2, i3, i2, i1+1)
-		  									          + I3D(oz, mm1, mm2, i3, i2, i1));
-          }
-        }
-      }
-
-#ifndef CRPL_COMP
-#pragma acc parallel loop gang num_gangs(mm3-1) num_workers(8) vector_length(128)
-#elif CRPL_COMP == 0
-#pragma acc kernels loop gang independent
-#endif
-      for (i3 = 0; i3 < mm3-1; i3++) {
-#pragma acc loop worker independent
-        for (i2 = 0; i2 < mm2-1; i2++) {
-#pragma acc loop vector independent
-          for (i1 = 0; i1 < mm1-1; i1++) {
-            /*
-          u[2*i3][2*i2+1][2*i1] = u[2*i3][2*i2+1][2*i1]
-                                + 0.5 * z1[i1];
-          u[2*i3][2*i2+1][2*i1+1] = u[2*i3][2*i2+1][2*i1+1]
-                                  + 0.25 * (z1[i1] + z1[i1+1]);
-             */
-            I3D(ou, n1, n2, 2*i3, 2*i2+1, 2*i1) = I3D(ou, n1, n2, 2*i3, 2*i2+1, 2*i1)
-											    + 0.5 * I3D(z1, mm1, mm2, i3, i2, i1);
-            I3D(ou, n1, n2, 2*i3, 2*i2+1, 2*i1+1) = I3D(ou, n1, n2, 2*i3, 2*i2+1, 2*i1+1)
-		  										    + 0.25 * (I3D(z1, mm1, mm2, i3, i2, i1)
-		  										        + I3D(z1, mm1, mm2, i3, i2, i1+1));
-          }
-        }
-      }
-
-#ifndef CRPL_COMP
-#pragma acc parallel loop gang num_gangs(mm3-1) num_workers(8) vector_length(128)
-#elif CRPL_COMP == 0
-#pragma acc kernels loop gang independent
-#endif
-      for (i3 = 0; i3 < mm3-1; i3++) {
-#pragma acc loop worker independent
-        for (i2 = 0; i2 < mm2-1; i2++) {
-#pragma acc loop vector independent
-          for (i1 = 0; i1 < mm1-1; i1++) {
-            /*
-          u[2*i3+1][2*i2][2*i1] = u[2*i3+1][2*i2][2*i1]
-                                  + 0.5 * z2[i1];
-          u[2*i3+1][2*i2][2*i1+1] = u[2*i3+1][2*i2][2*i1+1]
-                                  + 0.25 * (z2[i1] + z2[i1+1]);
-             */
-            I3D(ou, n1, n2, 2*i3+1, 2*i2, 2*i1) = I3D(ou, n1, n2, 2*i3+1, 2*i2, 2*i1)
-		  									      + 0.5 * I3D(z2, mm1, mm2, i3, i2, i1);
-            I3D(ou, n1, n2, 2*i3+1, 2*i2, 2*i1+1) = I3D(ou, n1, n2, 2*i3+1, 2*i2, 2*i1+1)
-		  										    + 0.25 * (I3D(z2, mm1, mm2, i3, i2, i1)
-		  										        + I3D(z2, mm1, mm2, i3, i2, i1+1));
-          }
-        }
-      }
-
-#ifndef CRPL_COMP
-#pragma acc parallel loop gang num_gangs(mm3-1) num_workers(8) vector_length(128)
-#elif CRPL_COMP == 0
-#pragma acc kernels loop gang independent
-#endif
-      for (i3 = 0; i3 < mm3-1; i3++) {
-#pragma acc loop worker independent
-        for (i2 = 0; i2 < mm2-1; i2++) {
-#pragma acc loop vector independent
-          for (i1 = 0; i1 < mm1-1; i1++) {
-            /*
-          u[2*i3+1][2*i2+1][2*i1] = u[2*i3+1][2*i2+1][2*i1]
-                                  + 0.25 * z3[i1];
-          u[2*i3+1][2*i2+1][2*i1+1] = u[2*i3+1][2*i2+1][2*i1+1]
-                                    + 0.125 * (z3[i1] + z3[i1+1]);
-             */
-            I3D(ou, n1, n2, 2*i3+1, 2*i2+1, 2*i1) = I3D(ou, n1, n2, 2*i3+1, 2*i2+1, 2*i1)
-		  										    + 0.25 * I3D(z3, mm1, mm2, i3, i2, i1);
-            I3D(ou, n1, n2, 2*i3+1, 2*i2+1, 2*i1+1) = I3D(ou, n1, n2, 2*i3+1, 2*i2+1, 2*i1+1)
-		  										      + 0.125 * (I3D(z3, mm1, mm2, i3, i2, i1)
-		  										          + I3D(z3, mm1, mm2, i3, i2, i1+1));
-          }
-        }
-      }
-    } else {
-      if (n1 == 3) {
-        d1 = 2;
-        t1 = 1;
-      } else {
-        d1 = 1;
-        t1 = 0;
-      }
-
-      if (n2 == 3) {
-        d2 = 2;
-        t2 = 1;
-      } else {
-        d2 = 1;
-        t2 = 0;
-      }
-
-      if (n3 == 3) {
-        d3 = 2;
-        t3 = 1;
-      } else {
-        d3 = 1;
-        t3 = 0;
-      }
-
-#ifndef CRPL_COMP
-#pragma acc parallel loop gang num_gangs(mm3-d3) num_workers(8) vector_length(128)
-#elif CRPL_COMP == 0
-#pragma acc kernels loop gang independent
-#endif
-      for (i3 = d3; i3 <= mm3-1; i3++) {
-#pragma acc loop worker independent
-        for (i2 = d2; i2 <= mm2-1; i2++) {
-#pragma acc loop vector independent
-          for (i1 = d1; i1 <= mm1-1; i1++) {
-            /*
-          u[2*i3-d3-1][2*i2-d2-1][2*i1-d1-1] = 
-            u[2*i3-d3-1][2*i2-d2-1][2*i1-d1-1]
-            + z[i3-1][i2-1][i1-1];
-             */
-            I3D(ou, n1, n2, 2*i3-d3-1, 2*i2-d2-1, 2*i1-d1-1) =
-                I3D(ou, n1, n2, 2*i3-d3-1, 2*i2-d2-1, 2*i1-d1-1)
-                + I3D(ou, mm1, mm2, i3-1, i2-1, i1-1);
-          }
-        }
-      }
-
-#ifndef CRPL_COMP
-#pragma acc parallel loop gang num_gangs(mm3-d3) num_workers(8) vector_length(128)
-#elif CRPL_COMP == 0
-#pragma acc kernels loop gang independent
-#endif
-      for (i3 = d3; i3 <= mm3-1; i3++) {
-#pragma acc loop worker independent
-        for (i2 = d2; i2 <= mm2-1; i2++) {
-#pragma acc loop vector independent
-          for (i1 = 1; i1 <= mm1-1; i1++) {
-            /*
-          u[2*i3-d3-1][2*i2-d2-1][2*i1-t1-1] = 
-            u[2*i3-d3-1][2*i2-d2-1][2*i1-t1-1]
-            + 0.5 * (z[i3-1][i2-1][i1] + z[i3-1][i2-1][i1-1]);
-             */
-            I3D(ou, n1, n2, 2*i3-d3-1, 2*i2-d2-1, 2*i1-t1-1) =
-                I3D(ou, n1, n2, 2*i3-d3-1, 2*i2-d2-1, 2*i1-t1-1)
-                + 0.5 * (I3D(oz, mm1, mm2, i3-1, i2-1, i1)
-                    + I3D(oz, mm1, mm2, i3-1, i2-1, i1-1));
-          }
-        }
-      }
-
-#ifndef CRPL_COMP
-#pragma acc parallel loop gang num_gangs(mm3-d3) num_workers(8) vector_length(128)
-#elif CRPL_COMP == 0
-#pragma acc kernels loop gang independent
-#endif
-      for (i3 = d3; i3 <= mm3-1; i3++) {
-#pragma acc loop worker independent
-        for (i2 = 1; i2 <= mm2-1; i2++) {
-#pragma acc loop vector independent
-          for (i1 = d1; i1 <= mm1-1; i1++) {
-            /*
-          u[2*i3-d3-1][2*i2-t2-1][2*i1-d1-1] = 
-            u[2*i3-d3-1][2*i2-t2-1][2*i1-d1-1]
-            + 0.5 * (z[i3-1][i2][i1-1] + z[i3-1][i2-1][i1-1]);
-             */
-            I3D(ou, n1, n2, 2*i3-d3-1, 2*i2-t2-1, 2*i1-d1-1) =
-                I3D(ou, n1, n2, 2*i3-d3-1, 2*i2-t2-1, 2*i1-d1-1)
-                + 0.5 * (I3D(oz, mm1, mm2, i3-1, i2,   i1-1)
-                    + I3D(oz, mm1, mm2, i3-1, i2-1, i1-1));
-          }
-        }
-      }
-
-#ifndef CRPL_COMP
-#pragma acc parallel loop gang num_gangs(mm3-d3) num_workers(8) vector_length(128)
-#elif CRPL_COMP == 0
-#pragma acc kernels loop gang independent
-#endif
-      for (i3 = d3; i3 <= mm3-1; i3++) {
-#pragma acc loop worker independent
-        for (i2 = 1; i2 <= mm2-1; i2++) {
-#pragma acc loop vector independent
-          for (i1 = 1; i1 <= mm1-1; i1++) {
-            /*
-          u[2*i3-d3-1][2*i2-t2-1][2*i1-t1-1] = 
-            u[2*i3-d3-1][2*i2-t2-1][2*i1-t1-1]
-            + 0.25 * (z[i3-1][i2][i1] + z[i3-1][i2-1][i1]
-                    + z[i3-1][i2][i1-1] + z[i3-1][i2-1][i1-1]);
-             */
-            I3D(ou, n1, n2, 2*i3-d3-1, 2*i2-t2-1, 2*i1-t1-1) =
-                I3D(ou, n1, n2, 2*i3-d3-1, 2*i2-t2-1, 2*i1-t1-1)
-                + 0.25 * (I3D(oz, mm1, mm2, i3-1, i2,   i1)
-                    + I3D(oz, mm1, mm2, i3-1, i2-1, i1)
-                    + I3D(oz, mm1, mm2, i3-1, i2,   i1-1)
-                    + I3D(oz, mm1, mm2, i3-1, i2-1, i1-1));
-          }
-        }
-      }
-
-#ifndef CRPL_COMP
-#pragma acc parallel loop gang num_gangs(mm3-1) num_workers(8) vector_length(128)
-#elif CRPL_COMP == 0
-#pragma acc kernels loop gang independent
-#endif
-      for (i3 = 1; i3 <= mm3-1; i3++) {
-#pragma acc loop worker independent
-        for (i2 = d2; i2 <= mm2-1; i2++) {
-#pragma acc loop vector independent
-          for (i1 = d1; i1 <= mm1-1; i1++) {
-            /*
-          u[2*i3-t3-1][2*i2-d2-1][2*i1-d1-1] = 
-            u[2*i3-t3-1][2*i2-d2-1][2*i1-d1-1]
-            + 0.5 * (z[i3][i2-1][i1-1] + z[i3-1][i2-1][i1-1]);
-             */
-            I3D(ou, n1, n2, 2*i3-t3-1, 2*i2-d2-1, 2*i1-d1-1) =
-                I3D(ou, n1, n2, 2*i3-t3-1, 2*i2-d2-1, 2*i1-d1-1)
-                + 0.5 * (I3D(oz, mm1, mm2, i3,   i2-1, i1-1)
-                    + I3D(oz, mm1, mm2, i3-1, i2-1, i1-1));
-          }
-        }
-      }
-
-#ifndef CRPL_COMP
-#pragma acc parallel loop gang num_gangs(mm3-1) num_workers(8) vector_length(128)
-#elif CRPL_COMP == 0
-#pragma acc kernels loop gang independent
-#endif
-      for (i3 = 1; i3 <= mm3-1; i3++) {
-#pragma acc loop worker independent
-        for (i2 = d2; i2 <= mm2-1; i2++) {
-#pragma acc loop vector independent
-          for (i1 = 1; i1 <= mm1-1; i1++) {
-            /*
-          u[2*i3-t3-1][2*i2-d2-1][2*i1-t1-1] = 
-            u[2*i3-t3-1][2*i2-d2-1][2*i1-t1-1]
-            + 0.25 * (z[i3  ][i2-1][i1] + z[i3  ][i2-1][i1-1]
-                    + z[i3-1][i2-1][i1] + z[i3-1][i2-1][i1-1]);
-             */
-            I3D(ou, n1, n2, 2*i3-t3-1, 2*i2-d2-1, 2*i1-t1-1) =
-                I3D(ou, n1, n2, 2*i3-t3-1, 2*i2-d2-1, 2*i1-t1-1)
-                + 0.25 * (I3D(oz, mm1, mm2, i3,   i2-1, i1)
-                    + I3D(oz, mm1, mm2, i3,   i2-1, i1-1)
-                    + I3D(oz, mm1, mm2, i3-1, i2-1, i1)
-                    + I3D(oz, mm1, mm2, i3-1, i2-1, i1-1));
-          }
-        }
-      }
-
-#ifndef CRPL_COMP
-#pragma acc parallel loop gang num_gangs(mm3-1) num_workers(8) vector_length(128)
-#elif CRPL_COMP == 0
-#pragma acc kernels loop gang independent
-#endif
-      for (i3 = 1; i3 <= mm3-1; i3++) {
-#pragma acc loop worker independent
-        for (i2 = 1; i2 <= mm2-1; i2++) {
-#pragma acc loop vector independent
-          for (i1 = d1; i1 <= mm1-1; i1++) {
-            /*
-          u[2*i3-t3-1][2*i2-t2-1][2*i1-d1-1] = 
-            u[2*i3-t3-1][2*i2-t2-1][2*i1-d1-1]
-            + 0.25 * (z[i3  ][i2][i1-1] + z[i3  ][i2-1][i1-1]
-                    + z[i3-1][i2][i1-1] + z[i3-1][i2-1][i1-1]);
-             */
-            I3D(ou, n1, n2, 2*i3-t3-1, 2*i2-t2-1, 2*i1-d1-1) =
-                I3D(ou, n1, n2, 2*i3-t3-1, 2*i2-t2-1, 2*i1-d1-1)
-                + 0.25 * (I3D(oz, mm1, mm2, i3,   i2,   i1-1)
-                    + I3D(oz, mm1, mm2, i3,   i2-1, i1-1)
-                    + I3D(oz, mm1, mm2, i3-1, i2,   i1-1)
-                    + I3D(oz, mm1, mm2, i3-1, i2-1, i1-1));
-          }
-        }
-      }
-
-#ifndef CRPL_COMP
-#pragma acc parallel loop gang num_gangs(mm3-1) num_workers(8) vector_length(128)
-#elif CRPL_COMP == 0
-#pragma acc kernels loop gang independent
-#endif
-      for (i3 = 1; i3 <= mm3-1; i3++) {
-#pragma acc loop worker independent
-        for (i2 = 1; i2 <= mm2-1; i2++) {
-#pragma acc loop vector independent
-          for (i1 = 1; i1 <= mm1-1; i1++) {
-            /*
-          u[2*i3-t3-1][2*i2-t2-1][2*i1-t1-1] = 
-            u[2*i3-t3-1][2*i2-t2-1][2*i1-t1-1]
-            + 0.125 * (z[i3  ][i2][i1  ] + z[i3  ][i2-1][i1  ]
-                     + z[i3  ][i2][i1-1] + z[i3  ][i2-1][i1-1]
-                     + z[i3-1][i2][i1  ] + z[i3-1][i2-1][i1  ]
-                     + z[i3-1][i2][i1-1] + z[i3-1][i2-1][i1-1]);
-             */
-            I3D(ou, n1, n2, 2*i3-t3-1, 2*i2-t2-1, 2*i1-t1-1) =
-                I3D(ou, n1, n2, 2*i3-t3-1, 2*i2-t2-1, 2*i1-t1-1)
-                + 0.125 * (I3D(oz, mm1, mm2, i3,   i2,   i1)
-                    + I3D(oz, mm1, mm2, i3,   i2-1, i1)
-                    + I3D(oz, mm1, mm2, i3,   i2,   i1-1)
-                    + I3D(oz, mm1, mm2, i3,   i2-1, i1-1)
-                    + I3D(oz, mm1, mm2, i3-1, i2,   i1)
-                    + I3D(oz, mm1, mm2, i3-1, i2-1, i1)
-                    + I3D(oz, mm1, mm2, i3-1, i2,   i1-1)
-                    + I3D(oz, mm1, mm2, i3-1, i2-1, i1-1));
-          }
-        }
-      }
-
     }
-  }/*end acc data */
+#pragma omp target is_device_ptr(z1, z2, z3) map(tofrom: oz[0:mm3*mm2*mm1]) map(tofrom: ou[0:n3*n2*n1])
+#ifndef CRPL_COMP
+#pragma omp teams distribute private(i3)
+#elif CRPL_COMP == 0
+#pragma omp teams distribute parallel for collapse(3) private(i3,i2,i1)
+#endif
+    for (i3 = 0; i3 < mm3-1; i3++) {
+#ifndef CRPL_COMP
+#pragma omp parallel for collapse(2) private(i2,i1)
+#endif
+      for (i2 = 0; i2 < mm2-1; i2++) {
+        for (i1 = 0; i1 < mm1-1; i1++) {
+          /* u[2*i3][2*i2][2*i1] = u[2*i3][2*i2][2*i1] */
+          /*   + z[i3][i2][i1]; */
+          /* u[2*i3][2*i2][2*i1+1] = u[2*i3][2*i2][2*i1+1] */
+          /*   + 0.5 * (z[i3][i2][i1+1] + z[i3][i2][i1]); */
+          I3D(ou, n1, n2, 2*i3, 2*i2, 2*i1)   = I3D(ou, n1, n2, 2*i3, 2*i2, 2*i1)
+            + I3D(oz, mm1, mm2, i3, i2, i1);
+          I3D(ou, n1, n2, 2*i3, 2*i2, 2*i1+1) = I3D(ou, n1, n2, 2*i3, 2*i2, 2*i1+1)
+            + 0.5*(I3D(oz, mm1, mm2, i3, i2, i1+1)
+                + I3D(oz, mm1, mm2, i3, i2, i1));
+        }
+      }
+    }
+#pragma omp target is_device_ptr(z1, z2, z3) map(tofrom: oz[0:mm3*mm2*mm1]) map(tofrom: ou[0:n3*n2*n1])
+#ifndef CRPL_COMP
+#pragma omp teams distribute private(i3)
+#elif CRPL_COMP == 0
+#pragma omp teams distribute parallel for collapse(3) private(i3,i2,i1)
+#endif
+    for (i3 = 0; i3 < mm3-1; i3++) {
+#ifndef CRPL_COMP
+#pragma omp parallel for collapse(2) private(i2,i1)
+#endif
+      for (i2 = 0; i2 < mm2-1; i2++) {
+        for (i1 = 0; i1 < mm1-1; i1++) {
+          /* u[2*i3][2*i2+1][2*i1] = u[2*i3][2*i2+1][2*i1] */
+          /*   + 0.5 * z1[i1]; */
+          /* u[2*i3][2*i2+1][2*i1+1] = u[2*i3][2*i2+1][2*i1+1] */
+          /*   + 0.25 * (z1[i1] + z1[i1+1]); */
+          I3D(ou, n1, n2, 2*i3, 2*i2+1, 2*i1) = I3D(ou, n1, n2, 2*i3, 2*i2+1, 2*i1)
+            + 0.5 * I3D(z1, mm1, mm2, i3, i2, i1);
+          I3D(ou, n1, n2, 2*i3, 2*i2+1, 2*i1+1) = I3D(ou, n1, n2, 2*i3, 2*i2+1, 2*i1+1)
+            + 0.25 * (I3D(z1, mm1, mm2, i3, i2, i1)
+                + I3D(z1, mm1, mm2, i3, i2, i1+1));
+        }
+      }
+    }
+#pragma omp target is_device_ptr(z1, z2, z3) map(tofrom: oz[0:mm3*mm2*mm1]) map(tofrom: ou[0:n3*n2*n1])
+#ifndef CRPL_COMP
+#pragma omp teams distribute private(i3)
+#elif CRPL_COMP == 0
+#pragma omp teams distribute parallel for collapse(3) private(i3,i2,i1)
+#endif
+    for (i3 = 0; i3 < mm3-1; i3++) {
+#ifndef CRPL_COMP
+#pragma omp parallel for collapse(2) private(i2,i1)
+#endif
+      for (i2 = 0; i2 < mm2-1; i2++) {
+        for (i1 = 0; i1 < mm1-1; i1++) {
+          /* u[2*i3+1][2*i2][2*i1] = u[2*i3+1][2*i2][2*i1] */
+          /*   + 0.5 * z2[i1]; */
+          /* u[2*i3+1][2*i2][2*i1+1] = u[2*i3+1][2*i2][2*i1+1] */
+          /*   + 0.25 * (z2[i1] + z2[i1+1]); */
+          I3D(ou, n1, n2, 2*i3+1, 2*i2, 2*i1) = I3D(ou, n1, n2, 2*i3+1, 2*i2, 2*i1)
+            + 0.5 * I3D(z2, mm1, mm2, i3, i2, i1);
+          I3D(ou, n1, n2, 2*i3+1, 2*i2, 2*i1+1) = I3D(ou, n1, n2, 2*i3+1, 2*i2, 2*i1+1)
+            + 0.25 * (I3D(z2, mm1, mm2, i3, i2, i1)
+                + I3D(z2, mm1, mm2, i3, i2, i1+1));
+        }
+      }
+    }
+#pragma omp target is_device_ptr(z1, z2, z3) map(tofrom: oz[0:mm3*mm2*mm1]) map(tofrom: ou[0:n3*n2*n1])
+#ifndef CRPL_COMP
+#pragma omp teams distribute private(i3)
+#elif CRPL_COMP == 0
+#pragma omp teams distribute parallel for collapse(3) private(i3,i2,i1)
+#endif
+    for (i3 = 0; i3 < mm3-1; i3++) {
+#ifndef CRPL_COMP
+#pragma omp parallel for collapse(2) private(i2,i1)
+#endif
+      for (i2 = 0; i2 < mm2-1; i2++) {
+        for (i1 = 0; i1 < mm1-1; i1++) {
+          /* u[2*i3+1][2*i2+1][2*i1] = u[2*i3+1][2*i2+1][2*i1] */
+          /*   + 0.25 * z3[i1]; */
+          /* u[2*i3+1][2*i2+1][2*i1+1] = u[2*i3+1][2*i2+1][2*i1+1] */
+          /*   + 0.125 * (z3[i1] + z3[i1+1]); */
+          I3D(ou, n1, n2, 2*i3+1, 2*i2+1, 2*i1) = I3D(ou, n1, n2, 2*i3+1, 2*i2+1, 2*i1)
+            + 0.25 * I3D(z3, mm1, mm2, i3, i2, i1);
+          I3D(ou, n1, n2, 2*i3+1, 2*i2+1, 2*i1+1) = I3D(ou, n1, n2, 2*i3+1, 2*i2+1, 2*i1+1)
+            + 0.125 * (I3D(z3, mm1, mm2, i3, i2, i1)
+                + I3D(z3, mm1, mm2, i3, i2, i1+1));
+        }
+      }
+    }
+  } else {
+    if (n1 == 3) {
+      d1 = 2;
+      t1 = 1;
+    } else {
+      d1 = 1;
+      t1 = 0;
+    }
+
+    if (n2 == 3) {
+      d2 = 2;
+      t2 = 1;
+    } else {
+      d2 = 1;
+      t2 = 0;
+    }
+
+    if (n3 == 3) {
+      d3 = 2;
+      t3 = 1;
+    } else {
+      d3 = 1;
+      t3 = 0;
+    }
+
+    {
+#pragma omp target is_device_ptr(z1, z2, z3) map(tofrom: oz[0:mm3*mm2*mm1]) map(tofrom: ou[0:n3*n2*n1])
+#ifndef CRPL_COMP
+#pragma omp teams distribute private(i3)
+#elif CRPL_COMP == 0
+#pragma omp teams distribute parallel for collapse(2) private(i3,i2,i1)
+#endif
+      for (i3 = d3; i3 <= mm3-1; i3++) {
+#ifndef CRPL_COMP
+#pragma omp parallel for private(i2,i1)
+#endif
+        for (i2 = d2; i2 <= mm2-1; i2++) {
+          for (i1 = d1; i1 <= mm1-1; i1++) {
+            /* u[2*i3-d3-1][2*i2-d2-1][2*i1-d1-1] = */ 
+            /*   u[2*i3-d3-1][2*i2-d2-1][2*i1-d1-1] */
+            /*   + z[i3-1][i2-1][i1-1]; */
+            I3D(ou, n1, n2, 2*i3-d3-1, 2*i2-d2-1, 2*i1-d1-1) =
+              I3D(ou, n1, n2, 2*i3-d3-1, 2*i2-d2-1, 2*i1-d1-1)
+              + I3D(ou, mm1, mm2, i3-1, i2-1, i1-1);
+          }
+          for (i1 = 1; i1 <= mm1-1; i1++) {
+            /* u[2*i3-d3-1][2*i2-d2-1][2*i1-t1-1] = */ 
+            /*   u[2*i3-d3-1][2*i2-d2-1][2*i1-t1-1] */
+            /*   + 0.5 * (z[i3-1][i2-1][i1] + z[i3-1][i2-1][i1-1]); */
+            I3D(ou, n1, n2, 2*i3-d3-1, 2*i2-d2-1, 2*i1-t1-1) =
+              I3D(ou, n1, n2, 2*i3-d3-1, 2*i2-d2-1, 2*i1-t1-1)
+              + 0.5 * (I3D(oz, mm1, mm2, i3-1, i2-1, i1)
+                  + I3D(oz, mm1, mm2, i3-1, i2-1, i1-1));
+          }
+        }
+      }
+#pragma omp target is_device_ptr(z1, z2, z3) map(tofrom: oz[0:mm3*mm2*mm1]) map(tofrom: ou[0:n3*n2*n1])
+#ifndef CRPL_COMP
+#pragma omp teams distribute private(i3)
+#elif CRPL_COMP == 0
+#pragma omp teams distribute parallel for collapse(2) private(i3,i2,i1)
+#endif
+      for (i3 = d3; i3 <= mm3-1; i3++) {
+#ifndef CRPL_COMP
+#pragma omp parallel for private(i2,i1)
+#endif
+        for (i2 = 1; i2 <= mm2-1; i2++) {
+          for (i1 = d1; i1 <= mm1-1; i1++) {
+            /* u[2*i3-d3-1][2*i2-t2-1][2*i1-d1-1] = */ 
+            /*   u[2*i3-d3-1][2*i2-t2-1][2*i1-d1-1] */
+            /*   + 0.5 * (z[i3-1][i2][i1-1] + z[i3-1][i2-1][i1-1]); */
+            I3D(ou, n1, n2, 2*i3-d3-1, 2*i2-t2-1, 2*i1-d1-1) =
+              I3D(ou, n1, n2, 2*i3-d3-1, 2*i2-t2-1, 2*i1-d1-1)
+              + 0.5 * (I3D(oz, mm1, mm2, i3-1, i2,   i1-1)
+                  + I3D(oz, mm1, mm2, i3-1, i2-1, i1-1));
+          }
+          for (i1 = 1; i1 <= mm1-1; i1++) {
+            /* u[2*i3-d3-1][2*i2-t2-1][2*i1-t1-1] = */ 
+            /*   u[2*i3-d3-1][2*i2-t2-1][2*i1-t1-1] */
+            /*   + 0.25 * (z[i3-1][i2][i1] + z[i3-1][i2-1][i1] */
+            /*       + z[i3-1][i2][i1-1] + z[i3-1][i2-1][i1-1]); */
+            I3D(ou, n1, n2, 2*i3-d3-1, 2*i2-t2-1, 2*i1-t1-1) =
+              I3D(ou, n1, n2, 2*i3-d3-1, 2*i2-t2-1, 2*i1-t1-1)
+              + 0.25 * (I3D(oz, mm1, mm2, i3-1, i2,   i1)
+                  + I3D(oz, mm1, mm2, i3-1, i2-1, i1)
+                  + I3D(oz, mm1, mm2, i3-1, i2,   i1-1)
+                  + I3D(oz, mm1, mm2, i3-1, i2-1, i1-1));
+          }
+        }
+      } // end target
+
+#pragma omp target is_device_ptr(z1, z2, z3) map(tofrom: oz[0:mm3*mm2*mm1]) map(tofrom: ou[0:n3*n2*n1])
+#ifndef CRPL_COMP
+#pragma omp teams distribute private(i3)
+#elif CRPL_COMP == 0
+#pragma omp teams distribute parallel for collapse(3) private(i3,i2,i1)
+#endif
+      for (i3 = 1; i3 <= mm3-1; i3++) {
+#ifndef CRPL_COMP
+#pragma omp parallel for collapse(2) private(i2,i1)
+#endif
+        for (i2 = d2; i2 <= mm2-1; i2++) {
+          for (i1 = d1; i1 <= mm1-1; i1++) {
+            /* u[2*i3-t3-1][2*i2-d2-1][2*i1-d1-1] = */ 
+            /*   u[2*i3-t3-1][2*i2-d2-1][2*i1-d1-1] */
+            /*   + 0.5 * (z[i3][i2-1][i1-1] + z[i3-1][i2-1][i1-1]); */
+            I3D(ou, n1, n2, 2*i3-t3-1, 2*i2-d2-1, 2*i1-d1-1) =
+              I3D(ou, n1, n2, 2*i3-t3-1, 2*i2-d2-1, 2*i1-d1-1)
+              + 0.5 * (I3D(oz, mm1, mm2, i3,   i2-1, i1-1)
+                  + I3D(oz, mm1, mm2, i3-1, i2-1, i1-1));
+          }
+        }
+      }
+#pragma omp target is_device_ptr(z1, z2, z3) map(tofrom: oz[0:mm3*mm2*mm1]) map(tofrom: ou[0:n3*n2*n1])
+#ifndef CRPL_COMP
+#pragma omp teams distribute private(i3)
+#elif CRPL_COMP == 0
+#pragma omp teams distribute parallel for collapse(3) private(i3,i2,i1)
+#endif
+      for (i3 = 1; i3 <= mm3-1; i3++) {
+#ifndef CRPL_COMP
+#pragma omp parallel for collapse(2) private(i2,i1)
+#endif
+        for (i2 = d2; i2 <= mm2-1; i2++) {
+          for (i1 = 1; i1 <= mm1-1; i1++) {
+            /* u[2*i3-t3-1][2*i2-d2-1][2*i1-t1-1] = */ 
+            /*   u[2*i3-t3-1][2*i2-d2-1][2*i1-t1-1] */
+            /*   + 0.25 * (z[i3  ][i2-1][i1] + z[i3  ][i2-1][i1-1] */
+            /*       + z[i3-1][i2-1][i1] + z[i3-1][i2-1][i1-1]); */
+            I3D(ou, n1, n2, 2*i3-t3-1, 2*i2-d2-1, 2*i1-t1-1) =
+              I3D(ou, n1, n2, 2*i3-t3-1, 2*i2-d2-1, 2*i1-t1-1)
+              + 0.25 * (I3D(oz, mm1, mm2, i3,   i2-1, i1)
+                  + I3D(oz, mm1, mm2, i3,   i2-1, i1-1)
+                  + I3D(oz, mm1, mm2, i3-1, i2-1, i1)
+                  + I3D(oz, mm1, mm2, i3-1, i2-1, i1-1));
+          }
+        }
+      }
+#pragma omp target is_device_ptr(z1, z2, z3) map(tofrom: oz[0:mm3*mm2*mm1]) map(tofrom: ou[0:n3*n2*n1])
+#ifndef CRPL_COMP
+#pragma omp teams distribute private(i3)
+#elif CRPL_COMP == 0
+#pragma omp teams distribute parallel for collapse(3) private(i3,i2,i1)
+#endif
+      for (i3 = 1; i3 <= mm3-1; i3++) {
+#ifndef CRPL_COMP
+#pragma omp parallel for collapse(2) private(i2,i1)
+#endif
+        for (i2 = 1; i2 <= mm2-1; i2++) {
+          for (i1 = d1; i1 <= mm1-1; i1++) {
+            /* u[2*i3-t3-1][2*i2-t2-1][2*i1-d1-1] = */ 
+            /*   u[2*i3-t3-1][2*i2-t2-1][2*i1-d1-1] */
+            /*   + 0.25 * (z[i3  ][i2][i1-1] + z[i3  ][i2-1][i1-1] */
+            /*       + z[i3-1][i2][i1-1] + z[i3-1][i2-1][i1-1]); */
+            I3D(ou, n1, n2, 2*i3-t3-1, 2*i2-t2-1, 2*i1-d1-1) =
+              I3D(ou, n1, n2, 2*i3-t3-1, 2*i2-t2-1, 2*i1-d1-1)
+              + 0.25 * (I3D(oz, mm1, mm2, i3,   i2,   i1-1)
+                  + I3D(oz, mm1, mm2, i3,   i2-1, i1-1)
+                  + I3D(oz, mm1, mm2, i3-1, i2,   i1-1)
+                  + I3D(oz, mm1, mm2, i3-1, i2-1, i1-1));
+          }
+        }
+      }
+#pragma omp target is_device_ptr(z1, z2, z3) map(tofrom: oz[0:mm3*mm2*mm1]) map(tofrom: ou[0:n3*n2*n1])
+#ifndef CRPL_COMP
+#pragma omp teams distribute private(i3)
+#elif CRPL_COMP == 0
+#pragma omp teams distribute parallel for collapse(3) private(i3,i2,i1)
+#endif
+      for (i3 = 1; i3 <= mm3-1; i3++) {
+#ifndef CRPL_COMP
+#pragma omp parallel for collapse(2) private(i2,i1)
+#endif
+        for (i2 = 1; i2 <= mm2-1; i2++) {
+          for (i1 = 1; i1 <= mm1-1; i1++) {
+            /* u[2*i3-t3-1][2*i2-t2-1][2*i1-t1-1] = */ 
+            /*   u[2*i3-t3-1][2*i2-t2-1][2*i1-t1-1] */
+            /*   + 0.125 * (z[i3  ][i2][i1  ] + z[i3  ][i2-1][i1  ] */
+            /*       + z[i3  ][i2][i1-1] + z[i3  ][i2-1][i1-1] */
+            /*       + z[i3-1][i2][i1  ] + z[i3-1][i2-1][i1  ] */
+            /*       + z[i3-1][i2][i1-1] + z[i3-1][i2-1][i1-1]); */
+            I3D(ou, n1, n2, 2*i3-t3-1, 2*i2-t2-1, 2*i1-t1-1) =
+              I3D(ou, n1, n2, 2*i3-t3-1, 2*i2-t2-1, 2*i1-t1-1)
+              + 0.125 * (I3D(oz, mm1, mm2, i3,   i2,   i1)
+                  + I3D(oz, mm1, mm2, i3,   i2-1, i1)
+                  + I3D(oz, mm1, mm2, i3,   i2,   i1-1)
+                  + I3D(oz, mm1, mm2, i3,   i2-1, i1-1)
+                  + I3D(oz, mm1, mm2, i3-1, i2,   i1)
+                  + I3D(oz, mm1, mm2, i3-1, i2-1, i1)
+                  + I3D(oz, mm1, mm2, i3-1, i2,   i1-1)
+                  + I3D(oz, mm1, mm2, i3-1, i2-1, i1-1));
+          }
+        }
+      } // end target
+    } 
+  }
+
 
 #ifdef _OPENACC
   acc_free(z1);
   acc_free(z2);
   acc_free(z3);
+#elif OPENMP_ALLOC
+  omp_target_free(z1, omp_get_default_device());
+  omp_target_free(z2, omp_get_default_device());
+  omp_target_free(z3, omp_get_default_device());
 #else
   free(z1);
   free(z2);
@@ -1351,19 +1306,19 @@ static void norm2u3(double *or, int n1, int n2, int n3,
   s = 0.0;
   *rnmu = 0.0;
   temp = *rnmu;
-#pragma acc data pcopyin(or[0:n3*n2*n1])
-  {
 
+#pragma omp target map(tofrom: or[0:n3*n2*n1]) map(tofrom: s, temp)
+  {
 #ifndef CRPL_COMP
-#pragma acc parallel loop gang reduction(+:s) reduction(max:temp) \
-        num_gangs(n3-2) num_workers(8) vector_length(128)
+#pragma omp teams distribute reduction(+:s) reduction(max:temp)  private(i3)
 #elif CRPL_COMP == 0
-#pragma acc kernels loop gang reduction(+:s) reduction(max:temp) independent
+#pragma omp teams distribute parallel for reduction(+:s) reduction(max:temp) private(i3,i2,i1) collapse(3)
 #endif
     for (i3 = 1; i3 < n3-1; i3++) {
-#pragma acc loop worker independent
+#ifndef CRPL_COMP
+#pragma omp parallel for reduction(+:s) reduction(max:temp) private(i2,i1) collapse(2)
+#endif
       for (i2 = 1; i2 < n2-1; i2++) {
-#pragma acc loop vector independent
         for (i1 = 1; i1 < n1-1; i1++) {
           //s = s + pow(r[i3][i2][i1], 2.0);
           //a = fabs(r[i3][i2][i1]);
@@ -1402,60 +1357,65 @@ static void comm3(double *ou, int n1, int n2, int n3, int kk)
 
   int i1, i2, i3;
   if (timeron) timer_start(T_comm3);
-#pragma acc data present(ou[0:n3*n2*n1])
+  
+/* #pragma omp parallel default(shared) private(i1,i2,i3) */
   {
-
+#pragma omp target map(tofrom:ou[0:n3*n2*n1])
 #ifndef CRPL_COMP
-#pragma acc parallel loop gang num_gangs(n3-2) vector_length(128)
+#pragma omp teams distribute private(i3)
 #elif CRPL_COMP == 0
-#pragma acc kernels loop gang independent
+#pragma omp teams distribute parallel for collapse(2) private(i3,i2)
 #endif
     for (i3 = 1; i3 < n3-1; i3++) {
-#pragma acc loop vector independent
+#ifndef CRPL_COMP
+#pragma omp parallel for private(i2)
+#endif
       for (i2 = 1; i2 < n2-1; i2++) {
-        /*
-      u[i3][i2][   0] = u[i3][i2][n1-2];
-      u[i3][i2][n1-1] = u[i3][i2][   1];
-         */
+        /* u[i3][i2][   0] = u[i3][i2][n1-2]; */
+        /* u[i3][i2][n1-1] = u[i3][i2][   1]; */
         I3D(ou, n1, n2, i3, i2, 0)    = I3D(ou, n1, n2, i3, i2, n1-2);
         I3D(ou, n1, n2, i3, i2, n1-1) = I3D(ou, n1, n2, i3, i2, 1);
       }
     }
 
+#pragma omp target map(tofrom:ou[0:n3*n2*n1])
 #ifndef CRPL_COMP
-#pragma acc parallel loop gang num_gangs(n3-2) vector_length(128)
+#pragma omp teams distribute private(i3)
 #elif CRPL_COMP == 0
-#pragma acc kernels loop gang independent
+#pragma omp teams distribute parallel for private(i3,i1) collapse(2)
 #endif
     for (i3 = 1; i3 < n3-1; i3++) {
-#pragma acc loop vector independent
+#ifndef CRPL_COMP
+#pragma omp parallel for  private(i1)
+#endif
       for (i1 = 0; i1 < n1; i1++) {
-        /*
-      u[i3][   0][i1] = u[i3][n2-2][i1];
-      u[i3][n2-1][i1] = u[i3][   1][i1];
-         */
+        /* u[i3][   0][i1] = u[i3][n2-2][i1]; */
+        /* u[i3][n2-1][i1] = u[i3][   1][i1]; */
         I3D(ou, n1, n2, i3, 0, i1)    = I3D(ou, n1, n2, i3, n2-2, i1);
         I3D(ou, n1, n2, i3, n2-1, i1) = I3D(ou, n1, n2, i3, 1, i1);
       }
     }
 
+/* #pragma omp for nowait */
+#pragma omp target map(tofrom:ou[0:n3*n2*n1])
 #ifndef CRPL_COMP
-#pragma acc parallel loop gang num_gangs(n2) vector_length(128)
+#pragma omp teams distribute private(i2)
 #elif CRPL_COMP == 0
-#pragma acc kernels loop gang independent
+#pragma omp teams distribute parallel for collapse(2) private(i2,i1)
 #endif
     for (i2 = 0; i2 < n2; i2++) {
-#pragma acc loop vector independent
+#ifndef CRPL_COMP
+#pragma omp parallel for private(i1)
+#endif
       for (i1 = 0; i1 < n1; i1++) {
-        /*
-      u[   0][i2][i1] = u[n3-2][i2][i1];
-      u[n3-1][i2][i1] = u[   1][i2][i1];
-         */
+        /* u[   0][i2][i1] = u[n3-2][i2][i1]; */
+        /* u[n3-1][i2][i1] = u[   1][i2][i1]; */
         I3D(ou, n1, n2, 0, i2, i1) = I3D(ou, n1, n2, n3-2, i2, i1);
         I3D(ou, n1, n2, n3-1, i2, i1) = I3D(ou, n1, n2, 1, i2, i1);
       }
     }
-  } /* end acc data */
+  } 
+
   if (timeron) timer_stop(T_comm3);
 }
 
@@ -1544,6 +1504,7 @@ static void zran3(double *oz, int n1, int n2, int n3, int nx, int ny, int k)
   //zero3(z, n1, n2, n3);
   zero3(oz, n1, n2, n3);
   //#pragma acc update host(oz[0:n3*n2*n1])
+  /* #pragma omp target update from(oz[0:n3*n2*n1]) */
   i = is1-2+nx*(is2-2+ny*(is3-2));
 
   ai = power(a, i);
@@ -1650,52 +1611,16 @@ static void zran3(double *oz, int n1, int n2, int n3, int nx, int ny, int k)
   m1 = 0;
   m0 = 0;
 
-  /*
-  int cnt = 0;
-  printf("  \n");
-  printf("  negative charges at\n");
-  for (i = 0; i < mm; i++) {
-    printf(" (%3d,%3d,%3d)", jg[1][i][0], jg[2][i][0], jg[3][i][0]);
-    if (++cnt % 5 == 0) printf("\n");
-  }
-
-  cnt = 0;
-  printf("  positive charges at\n");
-  for (i = 0; i < mm; i++) {
-    printf(" (%3d,%3d,%3d)", jg[1][i][1], jg[2][i][1], jg[3][i][1]);
-    if (++cnt % 5 == 0) printf("\n");
-  }
-
-  cnt = 0;
-  printf("  small random numbers were\n");
-  for (i = mm-1; i >= 0; i--) {
-    printf(" %15.8E", ten[i][0]);
-    if (++cnt % 5 == 0) printf("\n");
-  }
-
-  cnt = 0;
-  printf("  and they were found on processor number\n");
-  for (i = mm-1; i >= 0; i--) {
-    printf(" %4d", jg[0][i][0]);
-    if (++cnt % 10 == 0) printf("\n");
-  }
-
-  cnt = 0;
-  printf("  large random numbers were\n");
-  for (i = mm-1; i >= 0; i--) {
-    printf(" %15.8E", ten[i][1]);
-    if (++cnt % 5 == 0) printf("\n");
-  }
-
-  cnt = 0;
-  printf("  and they were found on processor number\n");
-  for (i = mm-1; i >= 0; i--) {
-    printf(" %4d", jg[0][i][1]);
-    if (++cnt % 10 == 0) printf("\n");
-  }
-   */
-
+#pragma omp target map(tofrom: oz[0:n3*n2*n1]) 
+#ifndef CRPL_COMP
+#pragma omp teams distribute private(i3)
+#elif CRPL_COMP == 0
+#pragma omp teams distribute parallel for collapse(3) private(i3,i2,i1)
+#endif
   for (i3 = 0; i3 < n3; i3++) {
+#ifndef CRPL_COMP
+#pragma omp parallel for collapse(2) private(i2,i1)
+#endif
     for (i2 = 0; i2 < n2; i2++) {
       for (i1 = 0; i1 < n1; i1++) {
         //z[i3][i2][i1] = 0.0;
@@ -1704,22 +1629,27 @@ static void zran3(double *oz, int n1, int n2, int n3, int nx, int ny, int k)
     }
   }
 
-  for (i = mm-1; i >= m0; i--) {
-    //z[jg[3][i][0]][jg[2][i][0]][jg[1][i][0]] = -1.0;
-    i3 = jg[3][i][0];
-    i2 = jg[2][i][0];
-    i1 = jg[1][i][0];
-    I3D(oz, n1, n2, i3, i2, i1) = -1.0;
-  }
+#pragma omp target data map(tofrom: oz[0:n3*n2*n1]) map(to: jg[0:4][0:mm][0:2])
+  {
+#pragma omp target teams distribute parallel for map(tofrom: oz[0:n3*n2*n1]) map(to: jg[0:4][0:mm][0:2]) private(i)
+    for (i = mm-1; i >= m0; i--) {
+      //z[jg[3][i][0]][jg[2][i][0]][jg[1][i][0]] = -1.0;
+      i3 = jg[3][i][0];
+      i2 = jg[2][i][0];
+      i1 = jg[1][i][0];
+      I3D(oz, n1, n2, i3, i2, i1) = -1.0;
+    }
 
-  for (i = mm-1; i >= m1; i--) {
-    //z[jg[3][i][1]][jg[2][i][1]][jg[1][i][1]] = +1.0;
-    i3 = jg[3][i][1];
-    i2 = jg[2][i][1];
-    i1 = jg[1][i][1];
-    I3D(oz, n1, n2, i3, i2, i1) = +1.0;
+#pragma omp target teams distribute parallel for map(tofrom: oz[0:n3*n2*n1]) map(to: jg[0:4][0:mm][0:2]) private(i)
+    for (i = mm-1; i >= m1; i--) {
+      //z[jg[3][i][1]][jg[2][i][1]][jg[1][i][1]] = +1.0;
+      i3 = jg[3][i][1];
+      i2 = jg[2][i][1];
+      i1 = jg[1][i][1];
+      I3D(oz, n1, n2, i3, i2, i1) = +1.0;
+    }
   }
-#pragma acc update device(oz[0:n3*n2*n1])
+  /* #pragma omp target update to(oz[0:n3*n2*n1]) */
 
   //comm3(z, n1, n2, n3, k);
   comm3(oz, n1, n2, n3, k);
@@ -1845,21 +1775,20 @@ static void zero3(double *oz, int n1, int n2, int n3)
 
   int i1, i2, i3;
 
+#pragma omp target map(tofrom: oz[0:n3*n2*n1])
 #ifndef CRPL_COMP
-#pragma acc parallel present(oz[0:n3*n2*n1]) num_gangs(n3) num_workers(8) vector_length(128)
+#pragma omp teams distribute private(i3)
 #elif CRPL_COMP == 0
-#pragma acc kernels present(oz[0:n3*n2*n1])
+#pragma omp teams distribute parallel for collapse(3) private(i3,i2,i1)
 #endif
-  {
-#pragma acc loop gang independent
-    for (i3 = 0; i3 < n3; i3++) {
-#pragma acc loop worker independent
-      for (i2 = 0; i2 < n2; i2++) {
-#pragma acc loop vector independent
-        for (i1 = 0; i1 < n1; i1++) {
-          //     z[i3][i2][i1] = 0.0;
-          I3D(oz, n1, n2, i3, i2, i1) = 0.0;
-        }
+  for (i3 = 0; i3 < n3; i3++) {
+#ifndef CRPL_COMP
+#pragma omp parallel for collapse(2) private(i2,i1)
+#endif
+    for (i2 = 0; i2 < n2; i2++) {
+      for (i1 = 0; i1 < n1; i1++) {
+        //     z[i3][i2][i1] = 0.0;
+        I3D(oz, n1, n2, i3, i2, i1) = 0.0;
       }
     }
   }
