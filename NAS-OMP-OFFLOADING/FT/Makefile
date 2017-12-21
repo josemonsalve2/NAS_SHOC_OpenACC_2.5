@@ -2,7 +2,7 @@ SHELL=/bin/sh
 BENCHMARK=ft
 BENCHMARKU=FT
 DEFINES=-DCRPL_COMP=0
-PXM=acc
+PXM=omp_offloading
 
 include ../config/make.def
 

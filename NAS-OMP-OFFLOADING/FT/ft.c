@@ -66,7 +66,7 @@
 #include <stdlib.h>
 #include <math.h>
 #include "npbparams.h"
-#include <openacc.h>
+#include <omp.h>
 
 #include "randdp.h"
 #include "timers.h"
@@ -204,7 +204,15 @@ int main(int argc, char *argv[])
   logical verified;
   char Class;
 
-  acc_init(acc_device_default);
+  int isOffloading = -1;
+#pragma omp target map (tofrom:isOffloading)
+  {
+    isOffloading = !omp_is_initial_device();
+  }
+
+  printf("Executing in the %s", isOffloading ? "device" : "host");
+
+//  acc_init(acc_device_default);
   //---------------------------------------------------------------------
   // Run the entire problem once to make sure all data is touched. 
   // This reduces variable startup costs, which is important for such a 
@@ -214,7 +222,11 @@ int main(int argc, char *argv[])
     timer_clear(i);
   }
   setup();
-#pragma acc data create(u0_real,u0_imag,u1_real,u1_imag,u_real,u_imag,\
+////#pragma acc data create(u0_real,u0_imag,u1_real,u1_imag,u_real,u_imag,\
+//        twiddle,gty1_real,gty1_imag, gty2_real, gty2_imag)
+
+#pragma omp target data map (alloc: u0_real,u0_imag, \
+        u1_real,u1_imag,u_real,u_imag,\
         twiddle,gty1_real,gty1_imag, gty2_real, gty2_imag)
   {
     init_ui(dims[0], dims[1], dims[2]);
@@ -277,18 +289,13 @@ static void init_ui(int d1, int d2, int d3)
 {
   int i, j, k;
 
-#ifndef CRPL_COMP
-#pragma acc parallel num_gangs(d3) num_workers(8) vector_length(128) \
-        present(u0_real,u0_imag,u1_real,u1_imag,twiddle)
-#elif CRPL_COMP == 0
-#pragma acc kernels present(u0_real,u0_imag,u1_real,u1_imag,twiddle)
-#endif
+#pragma omp target map (alloc: u0_real,u0_imag,u1_real,u1_imag,twiddle)
   {
-#pragma acc loop gang independent
+#pragma omp target 
+#pragma omp teams distribute 
     for (k = 0; k < d3; k++) {
-#pragma acc loop worker independent
+#pragma omp parallel for 
       for (j = 0; j < d2; j++) {
-#pragma acc loop vector independent
         for (i = 0; i < d1; i++) {
           u0_real[k*d2*(d1+1) + j*(d1+1) + i] = 0.0;
           u0_imag[k*d2*(d1+1) + j*(d1+1) + i] = 0.0;
@@ -299,6 +306,7 @@ static void init_ui(int d1, int d2, int d3)
       }
     }
   }
+#pragma omp target update from(u0_real,u0_imag,u1_real,u1_imag)
 }
 
 
@@ -308,19 +316,14 @@ static void init_ui(int d1, int d2, int d3)
 static void evolve(int d1, int d2, int d3)
 {
   int i, j, k;
-
-#ifndef CRPL_COMP
-#pragma acc parallel num_gangs(d3) num_workers(8) vector_length(128) \
-        present(u0_real,u0_imag,u1_real,u1_imag,twiddle)
-#elif CRPL_COMP == 0
-#pragma acc kernels present(u0_real,u0_imag,u1_real,u1_imag,twiddle)
-#endif
+#pragma omp target update to (u0_real, u0_imag, u1_real, u1_imag, twiddle)
+//#pragma omp target map (alloc: u0_real,u0_imag,u1_real,u1_imag,twiddle)
   {
-#pragma acc loop gang independent
+#pragma omp target teams distribute
     for (k = 0; k < d3; k++) {
-#pragma acc loop worker independent
+#pragma omp parallel for
       for (j = 0; j < d2; j++) {
-#pragma acc loop vector independent
+#pragma omp simd
         for (i = 0; i < d1; i++) {
           u0_real[k*d2*(d1+1) + j*(d1+1) + i] = u0_real[k*d2*(d1+1) + j*(d1+1) + i]
                                                         *twiddle[k*d2*(d1+1) + j*(d1+1) + i];
@@ -333,6 +336,7 @@ static void evolve(int d1, int d2, int d3)
       }
     }
   }
+#pragma omp target update from (u0_real, u0_imag, u1_real, u1_imag)
 }
 
 
@@ -361,13 +365,13 @@ static void compute_initial_conditions(int d1, int d2, int d3)
     starts[k] = start;
   }
 
-  //#pragma acc update host(u1_real,u1_imag)
+  ////#pragma acc update host(u1_real,u1_imag)
   //---------------------------------------------------------------------
   // Go through by z planes filling in one square at a time.
   //---------------------------------------------------------------------
-  //#pragma acc parallel num_gangs(d3/128) vector_length(128) present(u1_real,u1_imag) copyin(starts[0:d3])
+  ////#pragma acc parallel num_gangs(d3/128) vector_length(128) present(u1_real,u1_imag) copyin(starts[0:d3])
   {
-    //#pragma acc loop gang vector
+    ////#pragma acc loop gang vector
     for (k = 0; k < d3; k++) {
       x0 = starts[k];
       for (j = 0; j < d2; j++) {
@@ -404,7 +408,8 @@ static void compute_initial_conditions(int d1, int d2, int d3)
       }
     }
   }
-#pragma acc update device(u1_real,u1_imag)
+////#pragma acc update device(u1_real,u1_imag)
+#pragma omp target update to (u1_real, u1_imag)
 }
 
 
@@ -504,16 +509,22 @@ static void compute_indexmap(int d1, int d2, int d3)
   ap = -4.0 * ALPHA * PI * PI;
 
 #ifndef CRPL_COMP
-#pragma acc parallel num_gangs(d3) num_workers(8) vector_length(128) present(twiddle)
+////#pragma acc parallel num_gangs(d3) num_workers(8) vector_length(128) present(twiddle)
 #elif CRPL_COMP == 0
-#pragma acc kernels present(twiddle)
+////#pragma acc kernels present(twiddle)
 #endif
+#pragma omp target update to (twiddle)
+//#pragma omp target map(alloc:twiddle)
   {
-#pragma acc loop gang independent
+////#pragma acc loop gang independent
+#pragma omp target teams 
+#pragma omp distribute 
     for (k = 0; k < d3; k++) {
-#pragma acc loop worker independent
+////#pragma acc loop worker independent
+#pragma omp parallel for 
       for (j = 0; j < d2; j++) {
-#pragma acc loop vector independent
+////#pragma acc loop vector independent
+#pragma omp simd private(kk, kk2,jj,kj2,ii)
         for (i = 0; i < d1; i++) {
           kk = ((k + NZ/2) % NZ) - NZ/2;
           kk2 = kk*kk;
@@ -526,6 +537,7 @@ static void compute_indexmap(int d1, int d2, int d3)
       }
     }
   }
+#pragma omp target update from (twiddle)
 }
 
 
@@ -569,10 +581,13 @@ static void fft_init(int n)
   //u[0] = dcmplx(m, 0.0);
 
 #ifndef CRPL_COMP
-#pragma acc parallel num_gangs(1) num_workers(1) vector_length(1) present(u_real,u_imag)
+//#pragma acc parallel num_gangs(1) num_workers(1) vector_length(1) present(u_real,u_imag)
 #elif CRPL_COMP == 0
-#pragma acc kernels present(u_real,u_imag)
+//#pragma acc kernels present(u_real,u_imag)
 #endif
+//#pragma omp target map(alloc: u_real,u_imag) 
+//#pragma omp target update to(u_real,u_imag) 
+//#pragma omp target teams   
   {
     u_real[0] = m;
     u_imag[0] = 0.0;
@@ -584,12 +599,14 @@ static void fft_init(int n)
     t = PI / ln;
 
 #ifndef CRPL_COMP
-#pragma acc parallel num_gangs((ln+127)/128) vector_length(128) present(u_real,u_imag)
+//#pragma acc parallel num_gangs((ln+127)/128) vector_length(128) present(u_real,u_imag)
 #elif CRPL_COMP == 0
-#pragma acc kernels present(u_real,u_imag)
+//#pragma acc kernels present(u_real,u_imag)
 #endif
+//#pragma omp target map(alloc: u_real,u_imag) 
     {
-#pragma acc loop gang vector independent
+//#pragma acc loop gang vector independent
+//#pragma omp simd private(ti)
       for (i = 0; i <= ln - 1; i++) {
         ti = i * t;
         //u[i+ku-1] = dcmplx(cos(ti), sin(ti));
@@ -597,6 +614,7 @@ static void fft_init(int n)
         u_imag[i+ku-1] = (double)sin(ti);
       }
     }
+#pragma omp target update to (u_real,u_imag) 
 
     ku = ku + ln;
     ln = 2 * ln;
@@ -638,17 +656,24 @@ static void cffts1_pos(int is, int d1, int d2, int d3)
   logd1 = ilog2(d1);
 
 #ifndef CRPL_COMP
-#pragma acc parallel num_gangs(d3) vector_length(128) \
+//#pragma acc parallel num_gangs(d3) vector_length(128) \
         present(gty1_real,gty1_imag,gty2_real,gty2_imag,\
                 u1_real,u1_imag,u_real,u_imag)
 #elif CRPL_COMP == 0
-#pragma acc kernels present(gty1_real,gty1_imag,gty2_real,gty2_imag,\
+//#pragma acc kernels present(gty1_real,gty1_imag,gty2_real,gty2_imag,\
                 u1_real,u1_imag,u_real,u_imag)
 #endif
+//#pragma omp target update to (gty1_real,gty1_imag,gty2_real,gty2_imag,\
+                             u1_real, u1_imag, u_real,u_imag) 
+#pragma omp target update to ( u1_real, u1_imag, u_real,u_imag) 
+//#pragma omp target map(alloc: gty1_real,gty1_imag,gty2_real,gty2_imag,\
+                             u1_real, u1_imag, u_real,u_imag) 
   {
-#pragma acc loop gang independent
+//#pragma acc loop gang independent
+#pragma omp target teams distribute
     for (k = 0; k < d3; k++) {
-#pragma acc loop vector independent
+//#pragma acc loop vector independent
+#pragma omp simd
       for (j = 0; j < d2; j++) {
         for (i = 0; i < d1; i++) {
           gty1_real[k][i][j] = u1_real[k*d2*(d1+1) + j*(d1+1) + i];
@@ -734,6 +759,9 @@ static void cffts1_pos(int is, int d1, int d2, int d3)
       }
     }
   }/*end acc parallel*/
+//#pragma omp target update from (gty1_real,gty1_imag,gty2_real,gty2_imag,\
+                             u1_real, u1_imag, u_real,u_imag) 
+#pragma omp target update from ( u1_real, u1_imag, u_real,u_imag) 
 }
 
 static void cffts1_neg(int is, int d1, int d2, int d3)
@@ -752,17 +780,22 @@ static void cffts1_neg(int is, int d1, int d2, int d3)
   logd1 = ilog2(d1);
 
 #ifndef CRPL_COMP
-#pragma acc parallel num_gangs(d3) vector_length(128) \
+//#pragma acc parallel num_gangs(d3) vector_length(128) \
         present(gty1_real,gty1_imag,gty2_real,gty2_imag,\
                 u1_real,u1_imag,u_real,u_imag)
 #elif CRPL_COMP == 0
-#pragma acc kernels present(gty1_real,gty1_imag,gty2_real,gty2_imag,\
+//#pragma acc kernels present(gty1_real,gty1_imag,gty2_real,gty2_imag,\
                 u1_real,u1_imag,u_real,u_imag)
 #endif
+//#pragma omp target update to (gty1_real,gty1_imag,gty2_real,gty2_imag,\
+                             u1_real, u1_imag, u_real,u_imag) 
+#pragma omp target update to ( u1_real, u1_imag, u_real,u_imag) 
   {
-#pragma acc loop gang independent
+//#pragma acc loop gang independent
+#pragma omp target teams distribute
     for (k = 0; k < d3; k++) {
-#pragma acc loop vector independent
+//#pragma acc loop vector independent
+#pragma omp simd
       for (j = 0; j < d2; j++ ){
         for (i = 0; i < d1; i++) {
           gty1_real[k][i][j] = u1_real[k*d2*(d1+1) + j*(d1+1) + i];
@@ -848,6 +881,9 @@ static void cffts1_neg(int is, int d1, int d2, int d3)
       }
     }
   }/*end acc parallel*/
+//#pragma omp target update from (gty1_real,gty1_imag,gty2_real,gty2_imag,\
+                             u1_real, u1_imag, u_real,u_imag) 
+#pragma omp target update from (u1_real, u1_imag, u_real,u_imag) 
 }
 
 
@@ -867,17 +903,24 @@ static void cffts2_pos(int is, int d1, int d2, int d3)
   logd2 = ilog2(d2);
 
 #ifndef CRPL_COMP
-#pragma acc parallel num_gangs(d3) vector_length(128) \
+//#pragma acc parallel num_gangs(d3) vector_length(128) \
         present(gty1_real,gty1_imag,gty2_real,gty2_imag,\
                 u1_real,u1_imag,u_real,u_imag)
 #elif CRPL_COMP == 0
-#pragma acc kernels present(gty1_real,gty1_imag,gty2_real,gty2_imag,\
+//#pragma acc kernels present(gty1_real,gty1_imag,gty2_real,gty2_imag,\
                 u1_real,u1_imag,u_real,u_imag)
 #endif
+//#pragma omp target update to (gty1_real,gty1_imag,gty2_real,gty2_imag,\
+                             u1_real, u1_imag, u_real,u_imag) 
+#pragma omp target update to ( u1_real, u1_imag, u_real,u_imag) 
+//#pragma omp target map(alloc: gty1_real,gty1_imag,gty2_real,gty2_imag,\
+                             u1_real, u1_imag, u_real,u_imag) 
   {
-#pragma acc loop gang independent
+//#pragma acc loop gang independent
+#pragma omp target teams distribute
     for (k = 0; k < d3; k++) {
-#pragma acc loop vector independent
+//#pragma acc loop vector independent
+#pragma omp simd
       for (i = 0; i < d1; i++) {
         for (j = 0; j < d2; j++) {
           gty1_real[k][j][i] = u1_real[k*d2*(d1+1) + j*(d1+1) + i];
@@ -964,6 +1007,9 @@ static void cffts2_pos(int is, int d1, int d2, int d3)
       }
     }
   }/*end acc parallel*/
+//#pragma omp target update from (gty1_real,gty1_imag,gty2_real,gty2_imag,\
+                             u1_real, u1_imag, u_real,u_imag) 
+#pragma omp target update from ( u1_real, u1_imag, u_real,u_imag) 
 }
 
 static void cffts2_neg(int is, int d1, int d2, int d3)
@@ -982,17 +1028,24 @@ static void cffts2_neg(int is, int d1, int d2, int d3)
   logd2 = ilog2(d2);
 
 #ifndef CRPL_COMP
-#pragma acc parallel num_gangs(d3) vector_length(128) \
+//#pragma acc parallel num_gangs(d3) vector_length(128) \
         present(gty1_real,gty1_imag,gty2_real,gty2_imag,\
                 u1_real,u1_imag,u_real,u_imag)
 #elif CRPL_COMP == 0
-#pragma acc kernels present(gty1_real,gty1_imag,gty2_real,gty2_imag,\
+//#pragma acc kernels present(gty1_real,gty1_imag,gty2_real,gty2_imag,\
                 u1_real,u1_imag,u_real,u_imag)
 #endif
+//#pragma omp target map(alloc: gty1_real,gty1_imag,gty2_real,gty2_imag,\
+                             u1_real, u1_imag, u_real,u_imag) 
+//#pragma omp target update to (gty1_real,gty1_imag,gty2_real,gty2_imag,\
+                             u1_real, u1_imag, u_real,u_imag) 
+#pragma omp target update to ( u1_real, u1_imag, u_real,u_imag) 
   {
-#pragma acc loop gang independent
+//#pragma acc loop gang independent
+#pragma omp target teams distribute
     for (k = 0; k < d3; k++) {
-#pragma acc loop vector independent
+//#pragma acc loop vector independent
+#pragma omp simd
       for (i = 0; i < d1; i ++) {
         for (j = 0; j < d2; j++) {
           gty1_real[k][j][i] = u1_real[k*d2*(d1+1) + j*(d1+1) + i];
@@ -1077,6 +1130,9 @@ static void cffts2_neg(int is, int d1, int d2, int d3)
         }
       }
     }
+//#pragma omp target update from (gty1_real,gty1_imag,gty2_real,gty2_imag,\
+                             u1_real, u1_imag, u_real,u_imag) 
+#pragma omp target update from ( u1_real, u1_imag, u_real,u_imag) 
   }/*end acc parallel*/
 }
 
@@ -1097,17 +1153,21 @@ static void cffts3_pos(int is, int d1, int d2, int d3)
   logd3 = ilog2(d3);
 
 #ifndef CRPL_COMP
-#pragma acc parallel num_gangs(d2) vector_length(128) \
+//#pragma acc parallel num_gangs(d2) vector_length(128) \
         present(gty1_real,gty1_imag,gty2_real,gty2_imag,\
                 u0_real,u0_imag,u1_real,u1_imag,u_real,u_imag)
 #elif CRPL_COMP == 0
-#pragma acc kernels present(gty1_real,gty1_imag,gty2_real,gty2_imag,\
+//#pragma acc kernels present(gty1_real,gty1_imag,gty2_real,gty2_imag,\
                 u0_real,u0_imag,u1_real,u1_imag,u_real,u_imag)
 #endif
+//#pragma omp target update to (gty1_real,gty1_imag,gty2_real,gty2_imag,\
+                             u1_real, u1_imag, u_real,u_imag) 
   {
-#pragma acc loop gang independent
+//#pragma acc loop gang independent
+//#pragma omp target teams distribute
     for (j = 0; j < d2; j++) {
-#pragma acc loop vector independent
+//#pragma acc loop vector independent
+//#pragma omp simd
       for (i = 0; i < d1; i ++) {
         for (k = 0; k < d3; k++) {
           gty1_real[j][k][i] = u1_real[k*d2*(d1+1) + j*(d1+1) + i];
@@ -1193,6 +1253,10 @@ static void cffts3_pos(int is, int d1, int d2, int d3)
       }
     }
   }/* end acc parlalel */
+//#pragma omp target update from (gty1_real,gty1_imag,gty2_real,gty2_imag,\
+                             u1_real, u1_imag, u_real,u_imag) 
+#pragma omp target update to (gty1_real,gty1_imag,gty2_real,gty2_imag,\
+                             u1_real, u1_imag, u_real,u_imag) 
 }
 
 
@@ -1214,17 +1278,24 @@ static void cffts3_neg(int is, int d1, int d2, int d3)
   logd3 = ilog2(d3);
 
 #ifndef CRPL_COMP
-#pragma acc parallel num_gangs(d2) vector_length(128) \
+//#pragma acc parallel num_gangs(d2) vector_length(128) \
         present(gty1_real,gty1_imag,gty2_real,gty2_imag,\
                 u1_real,u1_imag,u_real,u_imag)
 #elif CRPL_COMP == 0
-#pragma acc kernels present(gty1_real,gty1_imag,gty2_real,gty2_imag,\
+//#pragma acc kernels present(gty1_real,gty1_imag,gty2_real,gty2_imag,\
                 u1_real,u1_imag,u_real,u_imag)
 #endif
+//#pragma omp target map(alloc: gty1_real,gty1_imag,gty2_real,gty2_imag,\
+                             u1_real, u1_imag, u_real,u_imag) 
+//#pragma omp target update to (gty1_real,gty1_imag,gty2_real,gty2_imag,\
+                             u1_real, u1_imag, u_real,u_imag) 
+#pragma omp target update to ( u1_real, u1_imag, u_real,u_imag) 
   {
-#pragma acc loop gang independent
+//#pragma acc loop gang independent
+#pragma omp target teams distribute
     for (j = 0; j < d2; j++) {
-#pragma acc loop vector independent
+//#pragma acc loop vector independent
+#pragma omp simd
       for (i = 0; i < d1; i++) {
         for (k = 0; k < d3; k++) {
           gty1_real[j][k][i] = u1_real[k*d2*(d1+1) + j*(d1+1) + i];
@@ -1310,6 +1381,9 @@ static void cffts3_neg(int is, int d1, int d2, int d3)
       }
     }
   }/*end acc parallel*/
+//#pragma omp target update from (gty1_real,gty1_imag,gty2_real,gty2_imag,\
+                             u1_real, u1_imag, u_real,u_imag) 
+#pragma omp target update from ( u1_real, u1_imag, u_real,u_imag) 
 }
 
 
@@ -1340,15 +1414,19 @@ static void checksum(int i, int d1, int d2, int d3)
   temp1 = 0.0;
   temp2 = 0.0;
 
-  //#pragma acc update host(u1_real,u1_imag)
+  ////#pragma acc update host(u1_real,u1_imag)
 #ifndef CRPL_COMP
-#pragma acc parallel num_gangs(1) num_workers(1) \
+//#pragma acc parallel num_gangs(1) num_workers(1) \
         vector_length(1024) present(u1_real,u1_imag)
 #elif CRPL_COMP == 0
-#pragma acc kernels present(u1_real,u1_imag)
+//#pragma acc kernels present(u1_real,u1_imag)
 #endif
+#pragma omp target update to (u1_real, u1_imag)
   {
-#pragma acc loop gang worker vector reduction(+:temp1,temp2)
+//#pragma acc loop gang worker vector reduction(+:temp1,temp2)
+#pragma omp target teams distribute 
+#pragma omp parallel 
+#pragma omp simd reduction(+:temp1,temp2)
     for (j = 1; j <= 1024; j++) {
       q = j % NX;
       r = 3*j % NY;
