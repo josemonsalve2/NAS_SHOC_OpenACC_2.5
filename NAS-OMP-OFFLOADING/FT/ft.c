@@ -204,14 +204,6 @@ int main(int argc, char *argv[])
   logical verified;
   char Class;
 
-  int isOffloading = -1;
-#pragma omp target map (tofrom:isOffloading)
-  {
-    isOffloading = !omp_is_initial_device();
-  }
-
-  printf("Executing in the %s", isOffloading ? "device" : "host");
-
 //  acc_init(acc_device_default);
   //---------------------------------------------------------------------
   // Run the entire problem once to make sure all data is touched. 
@@ -225,9 +217,9 @@ int main(int argc, char *argv[])
 ////#pragma acc data create(u0_real,u0_imag,u1_real,u1_imag,u_real,u_imag,\
 //        twiddle,gty1_real,gty1_imag, gty2_real, gty2_imag)
 
-#pragma omp target data map (alloc: u0_real,u0_imag, \
-        u1_real,u1_imag,u_real,u_imag,\
-        twiddle,gty1_real,gty1_imag, gty2_real, gty2_imag)
+#pragma omp target data map(to: u0_real, u0_imag, u1_real, u1_imag, twiddle)\
+        map (alloc: u_real,u_imag,\
+        gty1_real,gty1_imag, gty2_real, gty2_imag)
   {
     init_ui(dims[0], dims[1], dims[2]);
     compute_indexmap(dims[0], dims[1], dims[2]);
@@ -290,8 +282,9 @@ static void init_ui(int d1, int d2, int d3)
   int i, j, k;
 
 #pragma omp target map (alloc: u0_real,u0_imag,u1_real,u1_imag,twiddle)
+//#pragma omp target update to(u0_real,u0_imag,u1_real,u1_imag,twiddle)
   {
-#pragma omp target 
+//#pragma omp target 
 #pragma omp teams distribute 
     for (k = 0; k < d3; k++) {
 #pragma omp parallel for 
@@ -316,10 +309,10 @@ static void init_ui(int d1, int d2, int d3)
 static void evolve(int d1, int d2, int d3)
 {
   int i, j, k;
-#pragma omp target update to (u0_real, u0_imag, u1_real, u1_imag, twiddle)
-//#pragma omp target map (alloc: u0_real,u0_imag,u1_real,u1_imag,twiddle)
+//#pragma omp target update to (u0_real, u0_imag, u1_real, u1_imag, twiddle)
+#pragma omp target map (alloc: u0_real,u0_imag,u1_real,u1_imag,twiddle)
   {
-#pragma omp target teams distribute
+#pragma omp teams distribute
     for (k = 0; k < d3; k++) {
 #pragma omp parallel for
       for (j = 0; j < d2; j++) {
@@ -336,7 +329,7 @@ static void evolve(int d1, int d2, int d3)
       }
     }
   }
-#pragma omp target update from (u0_real, u0_imag, u1_real, u1_imag)
+//#pragma omp target update from (u0_real, u0_imag, u1_real, u1_imag)
 }
 
 
@@ -409,7 +402,7 @@ static void compute_initial_conditions(int d1, int d2, int d3)
     }
   }
 ////#pragma acc update device(u1_real,u1_imag)
-#pragma omp target update to (u1_real, u1_imag)
+#pragma omp target update to(u1_real, u1_imag)
 }
 
 
@@ -513,11 +506,11 @@ static void compute_indexmap(int d1, int d2, int d3)
 #elif CRPL_COMP == 0
 ////#pragma acc kernels present(twiddle)
 #endif
-#pragma omp target update to (twiddle)
-//#pragma omp target map(alloc:twiddle)
+//#pragma omp target update to (twiddle)
+#pragma omp target map(alloc:twiddle)
   {
 ////#pragma acc loop gang independent
-#pragma omp target teams 
+#pragma omp teams 
 #pragma omp distribute 
     for (k = 0; k < d3; k++) {
 ////#pragma acc loop worker independent
@@ -585,9 +578,9 @@ static void fft_init(int n)
 #elif CRPL_COMP == 0
 //#pragma acc kernels present(u_real,u_imag)
 #endif
-//#pragma omp target map(alloc: u_real,u_imag) 
+#pragma omp target map(alloc: u_real,u_imag) 
 //#pragma omp target update to(u_real,u_imag) 
-//#pragma omp target teams   
+#pragma omp teams   
   {
     u_real[0] = m;
     u_imag[0] = 0.0;
@@ -603,10 +596,10 @@ static void fft_init(int n)
 #elif CRPL_COMP == 0
 //#pragma acc kernels present(u_real,u_imag)
 #endif
-//#pragma omp target map(alloc: u_real,u_imag) 
+#pragma omp target map(alloc: u_real,u_imag) map(to:ku,t) 
     {
 //#pragma acc loop gang vector independent
-//#pragma omp simd private(ti)
+#pragma omp simd private(ti) 
       for (i = 0; i <= ln - 1; i++) {
         ti = i * t;
         //u[i+ku-1] = dcmplx(cos(ti), sin(ti));
@@ -614,7 +607,7 @@ static void fft_init(int n)
         u_imag[i+ku-1] = (double)sin(ti);
       }
     }
-#pragma omp target update to (u_real,u_imag) 
+#pragma omp target update from(u_real,u_imag) 
 
     ku = ku + ln;
     ln = 2 * ln;
@@ -665,16 +658,17 @@ static void cffts1_pos(int is, int d1, int d2, int d3)
 #endif
 //#pragma omp target update to (gty1_real,gty1_imag,gty2_real,gty2_imag,\
                              u1_real, u1_imag, u_real,u_imag) 
-#pragma omp target update to ( u1_real, u1_imag, u_real,u_imag) 
-//#pragma omp target map(alloc: gty1_real,gty1_imag,gty2_real,gty2_imag,\
-                             u1_real, u1_imag, u_real,u_imag) 
+//#pragma omp target update to ( u1_real, u1_imag, u_real,u_imag) 
+#pragma omp target map(alloc: gty1_real,gty1_imag,gty2_real,gty2_imag, u1_real, u1_imag)\
+                             map(to: /*u1_real, u1_imag,*/ u_real, u_imag)
   {
 //#pragma acc loop gang independent
-#pragma omp target teams distribute
+#pragma omp /*target*/ teams distribute collapse(2)
     for (k = 0; k < d3; k++) {
 //#pragma acc loop vector independent
-#pragma omp simd
+//#pragma omp simd
       for (j = 0; j < d2; j++) {
+#pragma omp parallel for
         for (i = 0; i < d1; i++) {
           gty1_real[k][i][j] = u1_real[k*d2*(d1+1) + j*(d1+1) + i];
           gty1_imag[k][i][j] = u1_imag[k*d2*(d1+1) + j*(d1+1) + i];
@@ -686,6 +680,7 @@ static void cffts1_pos(int is, int d1, int d2, int d3)
           li = 1 << (logd1 - l);
           lj = 2 * lk;
           ku = li;
+#pragma omp parallel for collapse(2) private(i1, k1, i11, i12, i21, i22, uu1_real, uu1_imag, x11_real, x11_imag, x21_real, x21_imag, temp_real, temp_imag)
           for (i1 = 0; i1 <= li - 1; i1++) {
             for (k1 = 0; k1 <= lk - 1; k1++) {
               i11 = i1 * lk;
@@ -724,6 +719,7 @@ static void cffts1_pos(int is, int d1, int d2, int d3)
             lj = 2 * lk;
             ku = li;
 
+#pragma omp parallel for collapse(2) private(i1, k1, i11, i12, i21, i22, uu2_real, uu2_imag, x12_real, x12_imag, x22_real, x22_imag, temp2_real, temp2_imag)
             for (i1 = 0; i1 <= li - 1; i1++) {
               for (k1 = 0; k1 <= lk - 1; k1++) {
                 i11 = i1 * lk;
@@ -752,6 +748,7 @@ static void cffts1_pos(int is, int d1, int d2, int d3)
           }/*end else*/
         }/*end l*/
 
+#pragma omp parallel for
         for (i = 0; i < d1; i++) {
           u1_real[k*d2*(d1+1) + j*(d1+1) + i] = gty1_real[k][i][j];
           u1_imag[k*d2*(d1+1) + j*(d1+1) + i] = gty1_imag[k][i][j];
@@ -761,7 +758,7 @@ static void cffts1_pos(int is, int d1, int d2, int d3)
   }/*end acc parallel*/
 //#pragma omp target update from (gty1_real,gty1_imag,gty2_real,gty2_imag,\
                              u1_real, u1_imag, u_real,u_imag) 
-#pragma omp target update from ( u1_real, u1_imag, u_real,u_imag) 
+//#pragma omp target update from ( u1_real, u1_imag, u_real,u_imag) 
 }
 
 static void cffts1_neg(int is, int d1, int d2, int d3)
@@ -789,14 +786,16 @@ static void cffts1_neg(int is, int d1, int d2, int d3)
 #endif
 //#pragma omp target update to (gty1_real,gty1_imag,gty2_real,gty2_imag,\
                              u1_real, u1_imag, u_real,u_imag) 
-#pragma omp target update to ( u1_real, u1_imag, u_real,u_imag) 
+#pragma omp target map ( alloc: u1_real, u1_imag, u_real,u_imag)\
+                   map(from: gty1_real, gty1_imag, gty2_real, gty2_imag) 
   {
 //#pragma acc loop gang independent
-#pragma omp target teams distribute
+#pragma omp teams distribute collapse(2)
     for (k = 0; k < d3; k++) {
 //#pragma acc loop vector independent
-#pragma omp simd
+//#pragma omp simd
       for (j = 0; j < d2; j++ ){
+#pragma omp parallel for
         for (i = 0; i < d1; i++) {
           gty1_real[k][i][j] = u1_real[k*d2*(d1+1) + j*(d1+1) + i];
           gty1_imag[k][i][j] = u1_imag[k*d2*(d1+1) + j*(d1+1) + i];
@@ -808,6 +807,7 @@ static void cffts1_neg(int is, int d1, int d2, int d3)
           li = 1 << (logd1 - l);
           lj = 2 * lk;
           ku = li;
+#pragma omp parallel for collapse(2) private(i1, k1, i11, i12, i21, i22, uu1_real, uu1_imag, x11_real, x11_imag, x21_real, x21_imag, temp_real, temp_imag)
           for (i1 = 0; i1 <= li - 1; i1++) {
             for (k1 = 0; k1 <= lk - 1; k1++) {
               i11 = i1 * lk;
@@ -835,6 +835,7 @@ static void cffts1_neg(int is, int d1, int d2, int d3)
             }
           }
           if(l == logd1){
+#pragma omp parallel for
             for (j1 = 0; j1 < d1; j1++) {
               gty1_real[k][j1][j] = gty2_real[k][j1][j];
               gty1_imag[k][j1][j] = gty2_imag[k][j1][j];
@@ -846,6 +847,7 @@ static void cffts1_neg(int is, int d1, int d2, int d3)
             lj = 2 * lk;
             ku = li;
 
+#pragma omp parallel for collapse(2) private(i1, k1, i11, i12, i21, i22, uu2_real, uu2_imag, x12_real, x12_imag, x22_real, x22_imag, temp2_real, temp2_imag)
             for (i1 = 0; i1 <= li - 1; i1++) {
               for (k1 = 0; k1 <= lk - 1; k1++) {
                 i11 = i1 * lk;
@@ -874,6 +876,7 @@ static void cffts1_neg(int is, int d1, int d2, int d3)
           }/*end else*/
         }/*end l*/
 
+#pragma omp parallel for
         for (i = 0; i < d1; i++) {
           u1_real[k*d2*(d1+1) + j*(d1+1) + i] = gty1_real[k][i][j];
           u1_imag[k*d2*(d1+1) + j*(d1+1) + i] = gty1_imag[k][i][j];
@@ -883,7 +886,7 @@ static void cffts1_neg(int is, int d1, int d2, int d3)
   }/*end acc parallel*/
 //#pragma omp target update from (gty1_real,gty1_imag,gty2_real,gty2_imag,\
                              u1_real, u1_imag, u_real,u_imag) 
-#pragma omp target update from (u1_real, u1_imag, u_real,u_imag) 
+//#pragma omp target update from (u1_real, u1_imag, u_real,u_imag) 
 }
 
 
@@ -912,16 +915,17 @@ static void cffts2_pos(int is, int d1, int d2, int d3)
 #endif
 //#pragma omp target update to (gty1_real,gty1_imag,gty2_real,gty2_imag,\
                              u1_real, u1_imag, u_real,u_imag) 
-#pragma omp target update to ( u1_real, u1_imag, u_real,u_imag) 
+//#pragma omp target update to ( u1_real, u1_imag, u_real,u_imag) 
 //#pragma omp target map(alloc: gty1_real,gty1_imag,gty2_real,gty2_imag,\
                              u1_real, u1_imag, u_real,u_imag) 
   {
 //#pragma acc loop gang independent
-#pragma omp target teams distribute
+#pragma omp target teams distribute collapse(2)
     for (k = 0; k < d3; k++) {
 //#pragma acc loop vector independent
-#pragma omp simd
+//#pragma omp simd
       for (i = 0; i < d1; i++) {
+#pragma omp parallel for
         for (j = 0; j < d2; j++) {
           gty1_real[k][j][i] = u1_real[k*d2*(d1+1) + j*(d1+1) + i];
           gty1_imag[k][j][i] = u1_imag[k*d2*(d1+1) + j*(d1+1) + i];
@@ -933,6 +937,7 @@ static void cffts2_pos(int is, int d1, int d2, int d3)
           li = 1 << (logd2 - l);
           lj = 2 * lk;
           ku = li;
+#pragma omp parallel for collapse(2) private(i1, k1, i11, i12, i21, i22, uu1_real, uu1_imag, x11_real, x11_imag, x21_real, x21_imag, temp_real, temp_imag)
           for (i1 = 0; i1 <= li - 1; i1++) {
             for (k1 = 0; k1 <= lk - 1; k1++) {
               i11 = i1 * lk;
@@ -960,6 +965,7 @@ static void cffts2_pos(int is, int d1, int d2, int d3)
             }
           }
           if(l == logd2){
+#pragma omp parallel for
             for (j1 = 0; j1 < d1; j1++) {
               //ty1[j][i] = ty2[j][i];
               gty1_real[k][j1][i] = gty2_real[k][j1][i];
@@ -972,6 +978,7 @@ static void cffts2_pos(int is, int d1, int d2, int d3)
             lj = 2 * lk;
             ku = li;
 
+#pragma omp parallel for collapse(2) private(i1, k1, i11, i12, i21, i22, uu2_real, uu2_imag, x12_real, x12_imag, x22_real, x22_imag, temp2_real, temp2_imag)
             for (i1 = 0; i1 <= li - 1; i1++) {
               for (k1 = 0; k1 <= lk - 1; k1++) {
                 i11 = i1 * lk;
@@ -1000,6 +1007,7 @@ static void cffts2_pos(int is, int d1, int d2, int d3)
           }/*end else*/
         }/*end l*/
 
+#pragma omp parallel for
         for (j = 0; j < d2; j++) {
           u1_real[k*d2*(d1+1) + j*(d1+1) + i] = gty1_real[k][j][i];
           u1_imag[k*d2*(d1+1) + j*(d1+1) + i] = gty1_imag[k][j][i];
@@ -1009,7 +1017,7 @@ static void cffts2_pos(int is, int d1, int d2, int d3)
   }/*end acc parallel*/
 //#pragma omp target update from (gty1_real,gty1_imag,gty2_real,gty2_imag,\
                              u1_real, u1_imag, u_real,u_imag) 
-#pragma omp target update from ( u1_real, u1_imag, u_real,u_imag) 
+//#pragma omp target update from ( u1_real, u1_imag, u_real,u_imag) 
 }
 
 static void cffts2_neg(int is, int d1, int d2, int d3)
@@ -1039,14 +1047,16 @@ static void cffts2_neg(int is, int d1, int d2, int d3)
                              u1_real, u1_imag, u_real,u_imag) 
 //#pragma omp target update to (gty1_real,gty1_imag,gty2_real,gty2_imag,\
                              u1_real, u1_imag, u_real,u_imag) 
-#pragma omp target update to ( u1_real, u1_imag, u_real,u_imag) 
+//#pragma omp target update to ( u1_real, u1_imag, u_real,u_imag) 
+#pragma omp target map (alloc: u1_real, u1_imag, u_real,u_imag, gty1_real, gty1_imag, gty2_real, gty2_imag) 
   {
 //#pragma acc loop gang independent
-#pragma omp target teams distribute
+#pragma omp teams distribute collapse(2)
     for (k = 0; k < d3; k++) {
 //#pragma acc loop vector independent
-#pragma omp simd
+//#pragma omp simd
       for (i = 0; i < d1; i ++) {
+#pragma omp parallel for
         for (j = 0; j < d2; j++) {
           gty1_real[k][j][i] = u1_real[k*d2*(d1+1) + j*(d1+1) + i];
           gty1_imag[k][j][i] = u1_imag[k*d2*(d1+1) + j*(d1+1) + i];
@@ -1058,6 +1068,7 @@ static void cffts2_neg(int is, int d1, int d2, int d3)
           li = 1 << (logd2 - l);
           lj = 2 * lk;
           ku = li;
+#pragma omp parallel for collapse(2) private(i1, k1, i11, i12, i21, i22, uu1_real, uu1_imag, x11_real, x11_imag, x21_real, x21_imag, temp_real, temp_imag)
           for (i1 = 0; i1 <= li - 1; i1++) {
             for (k1 = 0; k1 <= lk - 1; k1++) {
               i11 = i1 * lk;
@@ -1085,6 +1096,7 @@ static void cffts2_neg(int is, int d1, int d2, int d3)
             }
           }
           if(l == logd2){
+#pragma omp parallel for
             for (j1 = 0; j1 < d1; j1++) {
               gty1_real[k][j1][i] = gty2_real[k][j1][i];
               gty1_imag[k][j1][i] = gty2_imag[k][j1][i];
@@ -1096,6 +1108,7 @@ static void cffts2_neg(int is, int d1, int d2, int d3)
             lj = 2 * lk;
             ku = li;
 
+#pragma omp parallel for collapse(2) private(i1, k1, i11, i12, i21, i22, uu2_real, uu2_imag, x12_real, x12_imag, x22_real, x22_imag, temp2_real, temp2_imag)
             for (i1 = 0; i1 <= li - 1; i1++) {
               for (k1 = 0; k1 <= lk - 1; k1++) {
                 i11 = i1 * lk;
@@ -1123,7 +1136,7 @@ static void cffts2_neg(int is, int d1, int d2, int d3)
             }
           }/*end else*/
         }/*end l*/
-
+#pragma omp parallel for
         for (j = 0; j < d2; j++) {
           u1_real[k*d2*(d1+1) + j*(d1+1) + i] = gty1_real[k][j][i];
           u1_imag[k*d2*(d1+1) + j*(d1+1) + i] = gty1_imag[k][j][i];
@@ -1132,8 +1145,8 @@ static void cffts2_neg(int is, int d1, int d2, int d3)
     }
 //#pragma omp target update from (gty1_real,gty1_imag,gty2_real,gty2_imag,\
                              u1_real, u1_imag, u_real,u_imag) 
-#pragma omp target update from ( u1_real, u1_imag, u_real,u_imag) 
   }/*end acc parallel*/
+//#pragma omp target update from ( u1_real, u1_imag, u_real,u_imag) 
 }
 
 /*is == 1*/
@@ -1164,11 +1177,12 @@ static void cffts3_pos(int is, int d1, int d2, int d3)
                              u1_real, u1_imag, u_real,u_imag) 
   {
 //#pragma acc loop gang independent
-//#pragma omp target teams distribute
+#pragma omp target teams distribute collapse(2)
     for (j = 0; j < d2; j++) {
 //#pragma acc loop vector independent
 //#pragma omp simd
       for (i = 0; i < d1; i ++) {
+#pragma omp parallel for
         for (k = 0; k < d3; k++) {
           gty1_real[j][k][i] = u1_real[k*d2*(d1+1) + j*(d1+1) + i];
           gty1_imag[j][k][i] = u1_imag[k*d2*(d1+1) + j*(d1+1) + i];
@@ -1180,6 +1194,7 @@ static void cffts3_pos(int is, int d1, int d2, int d3)
           li = 1 << (logd3 - l);
           lj = 2 * lk;
           ku = li;
+#pragma omp parallel for collapse(2) private(i1, k1, i11, i12, i21, i22, uu1_real, uu1_imag, x11_real, x11_imag, x21_real, x21_imag, temp_real, temp_imag)
           for (i1 = 0; i1 <= li - 1; i1++) {
             for (k1 = 0; k1 <= lk - 1; k1++) {
               i11 = i1 * lk;
@@ -1207,6 +1222,7 @@ static void cffts3_pos(int is, int d1, int d2, int d3)
             }
           }
           if(l == logd3){
+#pragma omp parallel for
             for (j1 = 0; j1 < d1; j1++) {
               gty1_real[j][j1][i] = gty2_real[j][j1][i];
               gty1_imag[j][j1][i] = gty2_imag[j][j1][i];
@@ -1218,6 +1234,7 @@ static void cffts3_pos(int is, int d1, int d2, int d3)
             lj = 2 * lk;
             ku = li;
 
+#pragma omp parallel for collapse(2) private(i1, k1, i11, i12, i21, i22, uu2_real, uu2_imag, x12_real, x12_imag, x22_real, x22_imag, temp2_real, temp2_imag)
             for (i1 = 0; i1 <= li - 1; i1++) {
               for (k1 = 0; k1 <= lk - 1; k1++) {
                 i11 = i1 * lk;
@@ -1246,6 +1263,7 @@ static void cffts3_pos(int is, int d1, int d2, int d3)
           }/*end else*/
         }/*end l*/
 
+#pragma omp parallel for
         for (k = 0; k < d3; k++) {
           u0_real[k*d2*(d1+1) + j*(d1+1) + i] = gty1_real[j][k][i];
           u0_imag[k*d2*(d1+1) + j*(d1+1) + i] = gty1_imag[j][k][i];
@@ -1253,10 +1271,8 @@ static void cffts3_pos(int is, int d1, int d2, int d3)
       }
     }
   }/* end acc parlalel */
-//#pragma omp target update from (gty1_real,gty1_imag,gty2_real,gty2_imag,\
-                             u1_real, u1_imag, u_real,u_imag) 
-#pragma omp target update to (gty1_real,gty1_imag,gty2_real,gty2_imag,\
-                             u1_real, u1_imag, u_real,u_imag) 
+#pragma omp target update from (u0_real, u0_imag, u_real,u_imag) 
+//#pragma omp target update to ( u0_real, u0_imag, u_real,u_imag) 
 }
 
 
@@ -1289,25 +1305,29 @@ static void cffts3_neg(int is, int d1, int d2, int d3)
                              u1_real, u1_imag, u_real,u_imag) 
 //#pragma omp target update to (gty1_real,gty1_imag,gty2_real,gty2_imag,\
                              u1_real, u1_imag, u_real,u_imag) 
-#pragma omp target update to ( u1_real, u1_imag, u_real,u_imag) 
+//#pragma omp target update to ( u1_real, u1_imag, u_real,u_imag) 
+#pragma omp target map (alloc: u1_real, u1_imag, u_real,u_imag, gty1_real, gty1_imag, gty2_real, gty2_imag) 
   {
 //#pragma acc loop gang independent
-#pragma omp target teams distribute
+#pragma omp teams distribute collapse(2)
     for (j = 0; j < d2; j++) {
 //#pragma acc loop vector independent
-#pragma omp simd
+//#pragma omp simd
       for (i = 0; i < d1; i++) {
+#pragma omp parallel for 
         for (k = 0; k < d3; k++) {
           gty1_real[j][k][i] = u1_real[k*d2*(d1+1) + j*(d1+1) + i];
           gty1_imag[j][k][i] = u1_imag[k*d2*(d1+1) + j*(d1+1) + i];
         }
 
+//#pragma omp parallel for private(n1, lk, li, lj, ku, i11, i12, i21, i22, uu1_real, uu1_imag, x11_real, x11_imag, x21_real, x21_imag, temp_real, temp_imag, uu2_real, uu2_imag, x12_real, x12_imag, x22_real, x22_imag, temp2_real, temp2_imag, l, i1, k1, j1 )
         for(l = 1; l <= logd3; l += 2){
           n1 = d3 / 2;
           lk = 1 << (l - 1);
           li = 1 << (logd3 - l);
           lj = 2 * lk;
           ku = li;
+#pragma omp parallel for collapse(2) private(i1, k1, i11, i12, i21, i22, uu1_real, uu1_imag, x11_real, x11_imag, x21_real, x21_imag, temp_real, temp_imag)
           for (i1 = 0; i1 <= li - 1; i1++) {
             for (k1 = 0; k1 <= lk - 1; k1++) {
               i11 = i1 * lk;
@@ -1335,6 +1355,7 @@ static void cffts3_neg(int is, int d1, int d2, int d3)
             }
           }
           if(l == logd3){
+#pragma omp parallel
             for (j1 = 0; j1 < d1; j1++) {
               gty1_real[j][j1][i] = gty2_real[j][j1][i];
               gty1_imag[j][j1][i] = gty2_imag[j][j1][i];
@@ -1346,6 +1367,7 @@ static void cffts3_neg(int is, int d1, int d2, int d3)
             lj = 2 * lk;
             ku = li;
 
+#pragma omp parallel for collapse(2) private(i1, k1, i11, i12, i21, i22, uu2_real, uu2_imag, x12_real, x12_imag, x22_real, x22_imag, temp2_real, temp2_imag)
             for (i1 = 0; i1 <= li - 1; i1++) {
               for (k1 = 0; k1 <= lk - 1; k1++) {
                 i11 = i1 * lk;
@@ -1374,6 +1396,7 @@ static void cffts3_neg(int is, int d1, int d2, int d3)
           }/*end else*/
         }/*end l*/
 
+#pragma omp parallel for 
         for (k = 0; k < d3; k++) {
           u1_real[k*d2*(d1+1) + j*(d1+1) + i] = gty1_real[j][k][i];
           u1_imag[k*d2*(d1+1) + j*(d1+1) + i] = gty1_imag[j][k][i];
@@ -1383,7 +1406,7 @@ static void cffts3_neg(int is, int d1, int d2, int d3)
   }/*end acc parallel*/
 //#pragma omp target update from (gty1_real,gty1_imag,gty2_real,gty2_imag,\
                              u1_real, u1_imag, u_real,u_imag) 
-#pragma omp target update from ( u1_real, u1_imag, u_real,u_imag) 
+//#pragma omp target update from ( u1_real, u1_imag, u_real,u_imag) 
 }
 
 
@@ -1421,12 +1444,11 @@ static void checksum(int i, int d1, int d2, int d3)
 #elif CRPL_COMP == 0
 //#pragma acc kernels present(u1_real,u1_imag)
 #endif
-#pragma omp target update to (u1_real, u1_imag)
+//#pragma omp target update to (u1_real, u1_imag)
+#pragma omp target map (alloc: u1_real, u1_imag) map(tofrom: temp1, temp2)
   {
 //#pragma acc loop gang worker vector reduction(+:temp1,temp2)
-#pragma omp target teams distribute 
-#pragma omp parallel 
-#pragma omp simd reduction(+:temp1,temp2)
+#pragma omp teams distribute reduction(+:temp1,temp2) 
     for (j = 1; j <= 1024; j++) {
       q = j % NX;
       r = 3*j % NY;
