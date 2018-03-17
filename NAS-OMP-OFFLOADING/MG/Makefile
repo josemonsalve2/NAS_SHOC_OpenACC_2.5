@@ -1,8 +1,8 @@
 SHELL=/bin/sh
 BENCHMARK=mg
 BENCHMARKU=MG
-DEFINES=-DCRPL_COMP=0
-PXM=acc
+DEFINES=-DCRPL_COMP=0 -DOPENMP_ALLOC
+PXM=omp_offloading
 
 include ../config/make.def
 
