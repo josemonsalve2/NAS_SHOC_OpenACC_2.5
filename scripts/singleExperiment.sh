@@ -24,15 +24,20 @@ function run_nas() {
     
     cd $BENCHMARK_FOLDER
     make clean | $LOG
+    mkdir -p bin
+    rm bin/*
     
     if [ "$BENCHMARK_SUITE" == "nas_cuda" ]; then
         echo "Executing CUDA benchmark" | $LOG
         echo "make $TEST" | $LOG
         (make $TEST) 2>&1 | tee -a $BASE_FOLDER/$FOLDER/compile.txt 
+        mv ./$BENCHMARK_EXEC bin
     else
         for CLASS in ${CLASSES[@]}; do
             echo "make CC=$CC CLASS=$CLASS DEFINES="$DEFINES" $TEST" | $LOG
-            (make CC=$CC CLASS=$CLASS DEFINES="$DEFINES" $TEST) 2>&1 | tee -a $BASE_FOLDER/$FOLDER/compile$CLASS.txt 
+            (make CC=$CC CLASS=$CLASS DEFINES="$DEFINES" $TEST) 2>&1 | tee -a $BASE_FOLDER/$FOLDER/compile$CLASS.txt
+            mv ./$BENCHMARK_EXEC.$CLASS.x bin
+            make clean
         done
     fi
     
@@ -40,15 +45,15 @@ function run_nas() {
     
     for CLASS in ${CLASSES[@]}; do
         if [ "$RECORD_CPU" == "1" ]; then 
-            $RECORD_APP $BENCHMARK_EXEC.$CLASS.x $BASE_FOLDER/$FOLDER/cpu$CLASS.txt&
+            $RECORD_APP ./bin/$BENCHMARK_EXEC.$CLASS.x $BASE_FOLDER/$FOLDER/cpu$CLASS.txt&
         fi
         
         if [ "$BENCHMARK_SUITE" == "nas_cuda" ]; then
-            echo "./$BENCHMARK_EXEC $CLASS" | $LOG
-            (time ./$BENCHMARK_EXEC $CLASS) 2>&1 | tee -a $BASE_FOLDER/$FOLDER/res$CLASS.txt 
+            echo "./bin/$BENCHMARK_EXEC $CLASS" | $LOG
+            (time ./bin/$BENCHMARK_EXEC $CLASS) 2>&1 | tee -a $BASE_FOLDER/$FOLDER/res$CLASS.txt 
         else
-            echo "./$BENCHMARK_EXEC.$CLASS.x" | $LOG
-            (time ./$BENCHMARK_EXEC.$CLASS.x) 2>&1 | tee -a $BASE_FOLDER/$FOLDER/res$CLASS.txt 
+            echo "./bin/$BENCHMARK_EXEC.$CLASS.x" | $LOG
+            (time ./bin/$BENCHMARK_EXEC.$CLASS.x) 2>&1 | tee -a $BASE_FOLDER/$FOLDER/res$CLASS.txt 
         fi
         
         if [ "$RECORD_CPU" == "1" ]; then echo "1" > .cpu_test; kill -9 $!; fi
