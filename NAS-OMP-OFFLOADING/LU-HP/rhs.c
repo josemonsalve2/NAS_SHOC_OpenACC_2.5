@@ -86,7 +86,7 @@ void rhs()
     if (timeron) timer_start(t_rhs);
 #pragma omp target data \
  map (alloc: frct, rsd, rtmp_G, utmp_G, rho_i, flux_G, qs, u)
-{  
+{
 #ifndef CRPL_COMP
 #elif CRPL_COMP == 0
     #pragma omp target teams map (alloc: frct, u, rho_i, qs) \
@@ -633,9 +633,8 @@ void rhs()
 
 #ifndef CRPL_COMP
 #elif CRPL_COMP == 0
-    #pragma omp target teams map(alloc: rtmp_G, utmp_G, flux_G) \
-    num_teams(jst - jend)
-    #pragma omp distribute parallel for collapse(3) private(j, i, k)
+    #pragma omp target map(alloc: rtmp_G, utmp_G, flux_G) 
+    #pragma omp teams distribute parallel for collapse(3) private(i,j,k) num_teams(jend - jst)
 #endif
     for (j = jst; j <= jend; j++) {
       for (i = ist; i <= iend; i++) {
@@ -739,5 +738,6 @@ void rhs()
 } // End of omp target data    
     if (timeron) timer_stop(t_rhsz);
     if (timeron) timer_stop(t_rhs);
+
 }
 

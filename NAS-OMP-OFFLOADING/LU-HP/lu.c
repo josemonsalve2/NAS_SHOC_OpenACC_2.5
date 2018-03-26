@@ -164,46 +164,46 @@ logical timeron;
 
 void omp_device_mem_init() {
   #pragma omp target enter data \
-          map (alloc: u[0:5][0:ISIZ3][0:(ISIZ2/2*2+1)][0:(ISIZ1/2*2+1)]) \
-          map (alloc: a[0:5][0:5][0:(ISIZ1*ISIZ2)]) \
-          map (alloc: b[0:5][0:5][0:(ISIZ1*ISIZ2)]) \
-          map (alloc: c[0:5][0:5][0:(ISIZ1*ISIZ2)]) \
-          map (alloc: d[0:5][0:5][0:(ISIZ1*ISIZ2)]) \
-          map (alloc: flux_G[0:5][0:ISIZ3][0:ISIZ2][0:ISIZ1]) \
-          map (alloc: indxp[0:(ISIZ1+ISIZ2+ISIZ3-5)][0:(ISIZ1*ISIZ2*3/4)]) \
-          map (alloc: jndxp[0:(ISIZ1+ISIZ2+ISIZ3-5)][0:(ISIZ1*ISIZ2*3/4)]) \
-          map (alloc: rho_i[0:ISIZ3][0:(ISIZ2/2*2+1)][0:(ISIZ1/2*2+1)]) \
-          map (alloc: frct[0:5][0:ISIZ3][0:(ISIZ2/2*2+1)][0:(ISIZ1/2*2+1)]) \
-          map (alloc: qs[0:ISIZ3][0:(ISIZ2/2*2+1)][0:(ISIZ1/2*2+1)]) \
-          map (alloc: rsd[0:5][0:ISIZ3][0:(ISIZ2/2*2+1)][0:(ISIZ1/2*2+1)]) \
-          map (alloc: tmat[0:5][0:5][0:(ISIZ1*ISIZ2*3/4)]) \
-          map (alloc: tv[0:5][0:(ISIZ1*ISIZ2*3/4)]) \
-          map (alloc: utmp_G[0:6][0:ISIZ2][0:ISIZ1][0:ISIZ3]) \
-          map (alloc: rtmp_G[0:5][0:ISIZ2][0:ISIZ1][0:ISIZ3]) \
-          map (alloc: rsdnm[0:5]) \
-          map (to: ce[0:5][0:13])
+          map (alloc: u) \
+          map (alloc: a) \
+          map (alloc: b) \
+          map (alloc: c) \
+          map (alloc: d) \
+          map (alloc: flux_G) \
+          map (alloc: indxp) \
+          map (alloc: jndxp) \
+          map (alloc: rho_i) \
+          map (alloc: frct) \
+          map (alloc: qs) \
+          map (alloc: rsd) \
+          map (alloc: tmat) \
+          map (alloc: tv) \
+          map (alloc: utmp_G) \
+          map (alloc: rtmp_G) \
+          map (alloc: rsdnm) \
+          map (to: ce)
 }
 
 void omp_device_mem_delete() {
   #pragma omp target exit data \
-          map (delete: u[0:5][0:ISIZ3][0:(ISIZ2/2*2+1)][0:(ISIZ1/2*2+1)]) \
-          map (delete: a[0:5][0:5][0:(ISIZ1*ISIZ2)]) \
-          map (delete: b[0:5][0:5][0:(ISIZ1*ISIZ2)]) \
-          map (delete: c[0:5][0:5][0:(ISIZ1*ISIZ2)]) \
-          map (delete: d[0:5][0:5][0:(ISIZ1*ISIZ2)]) \
-          map (delete: flux_G[0:5][0:ISIZ3][0:ISIZ2][0:ISIZ1]) \
-          map (delete: indxp[0:(ISIZ1+ISIZ2+ISIZ3-5)][0:(ISIZ1*ISIZ2*3/4)]) \
-          map (delete: jndxp[0:(ISIZ1+ISIZ2+ISIZ3-5)][0:(ISIZ1*ISIZ2*3/4)]) \
-          map (delete: rho_i[0:ISIZ3][0:(ISIZ2/2*2+1)][0:(ISIZ1/2*2+1)]) \
-          map (delete: frct[0:5][0:ISIZ3][0:(ISIZ2/2*2+1)][0:(ISIZ1/2*2+1)]) \
-          map (delete: qs[0:ISIZ3][0:(ISIZ2/2*2+1)][0:(ISIZ1/2*2+1)]) \
-          map (delete: rsd[0:5][0:ISIZ3][0:(ISIZ2/2*2+1)][0:(ISIZ1/2*2+1)]) \
-          map (delete: tmat[0:5][0:5][0:(ISIZ1*ISIZ2*3/4)]) \
-          map (delete: tv[0:5][0:(ISIZ1*ISIZ2*3/4)]) \
-          map (delete: utmp_G[0:6][0:ISIZ2][0:ISIZ1][0:ISIZ3]) \
-          map (delete: rtmp_G[0:5][0:ISIZ2][0:ISIZ1][0:ISIZ3]) \
-          map (delete: ce[0:5][0:13]) \
-          map (from: rsdnm[0:5]) 
+          map (delete: u) \
+          map (delete: a) \
+          map (delete: b) \
+          map (delete: c) \
+          map (delete: d) \
+          map (delete: flux_G) \
+          map (delete: indxp) \
+          map (delete: jndxp) \
+          map (delete: rho_i) \
+          map (delete: frct) \
+          map (delete: qs) \
+          map (delete: rsd) \
+          map (delete: tmat) \
+          map (delete: tv) \
+          map (delete: utmp_G) \
+          map (delete: rtmp_G) \
+          map (delete: ce) \
+          map (from: rsdnm) 
 } // TODO: Change rsdnm to from again
 
 int main(int argc, char *argv[])
