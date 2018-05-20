@@ -181,6 +181,7 @@ void omp_device_mem_init() {
           map (alloc: utmp_G) \
           map (alloc: rtmp_G) \
           map (alloc: rsdnm) \
+          map (alloc: np) \
           map (to: ce)
 }
 
@@ -203,6 +204,7 @@ void omp_device_mem_delete() {
           map (delete: utmp_G) \
           map (delete: rtmp_G) \
           map (delete: ce) \
+          map (delete: np) \
           map (from: rsdnm) 
 } // TODO: Change rsdnm to from again
 

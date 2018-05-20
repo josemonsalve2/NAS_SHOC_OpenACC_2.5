@@ -81,8 +81,7 @@ void l2norm (int ldx, int ldy, int ldz, int nx0, int ny0, int nz0,
   rsdnm2 = (double)0.0;
   rsdnm3 = (double)0.0;
   rsdnm4 = (double)0.0;
-#pragma omp target data map (alloc: rsdnm[:], rsd[:][:][:][:])
-#pragma omp target map (alloc: rsdnm[:], rsd[:][:][:][:])
+#pragma omp target map (alloc: rsdnm, rsd)
   {
 #ifndef CRPL_COMP
     #pragma omp parallel for private(m)

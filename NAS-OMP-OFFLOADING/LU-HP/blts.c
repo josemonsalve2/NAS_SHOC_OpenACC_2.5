@@ -70,6 +70,7 @@
 // To improve cache performance, second two dimensions padded by 1 
 // for even number sizes only.  Only needed in v.
 //---------------------------------------------------------------------
+#pragma omp declare target
 void blts (int ldmx, int ldmy, int ldmz, int nx, int ny, int nz, int l,
     double omega)
 {
@@ -79,16 +80,10 @@ void blts (int ldmx, int ldmy, int ldmz, int nx, int ny, int nz, int l,
   int i, j, k, m, n;
   double tmp, tmp1;
   int npl = np[l];
-
-#pragma omp target data map(alloc: a, b, c, d, indxp, jndxp, tv, rsd, tmat)
-#pragma omp target teams map(alloc: a, b, c, d, indxp, jndxp, tv, rsd, tmat)\
-        num_teams((npl+127)/128)
-  {
     
-
 #ifndef CRPL_COMP
 #elif CRPL_COMP == 0
-    #pragma omp distribute parallel for private (n, j, i, k)
+    #pragma omp parallel for private (n, j, i, k)
 #endif    
 for (n = 1; n <= npl; n++) {
       j = jndxp[l][n];
@@ -106,7 +101,7 @@ for (n = 1; n <= npl; n++) {
 
 #ifndef CRPL_COMP
 #elif CRPL_COMP == 0
-    #pragma omp distribute parallel for private (n, i, j, k, tmp1, tmp)
+    #pragma omp parallel for private (n, i, j, k, tmp1, tmp)
 #endif
     for (n = 1; n <= npl; n++) {
       j = jndxp[l][n];
@@ -231,6 +226,6 @@ for (n = 1; n <= npl; n++) {
       rsd[0][k][j][i] = tv[0][n] / tmat[0][0][n];
     }
 
-  } // end of omp target data
 }
 
+#pragma omp end declare target

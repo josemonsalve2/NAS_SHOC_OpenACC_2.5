@@ -62,6 +62,7 @@
 //---------------------------------------------------------------------
 // compute the lower triangular part of the jacobian matrix
 //---------------------------------------------------------------------
+#pragma omp declare target
 void jacld(int l)
 {
   //---------------------------------------------------------------------
@@ -78,14 +79,9 @@ void jacld(int l)
   c1345 = C1 * C3 * C4 * C5;
   c34 = C3 * C4;
 
-#pragma omp target data map(alloc: a, b, c, d, u, indxp, jndxp, rho_i, qs)
-#pragma omp target teams map (alloc: a, b, c, d, u, indxp, jndxp, rho_i, qs) \
-        num_teams((npl+127)/128)
-  {
-
 #ifndef CRPL_COMP
 #elif CRPL_COMP == 0
-    #pragma omp distribute parallel for private( tmp1, tmp2, tmp3, i, j, n, k)
+    #pragma omp teams distribute private( tmp1, tmp2, tmp3, i, j, n, k)
 #endif
     for (n = 1; n <= npl; n++) {
       j = jndxp[l][n];
@@ -370,8 +366,8 @@ void jacld(int l)
           - dt * tx1 * c1345 * tmp1
           - dt * tx1 * dx5;
     }
-            
-} // end of omp target data
-        
+                    
 }
+#pragma omp end declare target
+
 

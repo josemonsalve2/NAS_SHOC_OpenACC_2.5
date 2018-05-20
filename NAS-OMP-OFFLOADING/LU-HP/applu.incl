@@ -138,9 +138,18 @@ void ssor(int niter);
 void rhs();
 void l2norm (int ldx, int ldy, int ldz, int nx0, int ny0, int nz0,
      int ist, int iend, int jst, int jend);
+
+#pragma omp declare target link(a, b, c, d, u, indxp, jndxp, rho_i, qs, tv, rsd, tmat, np)
+#pragma omp declare target link(dt, tx1, dx1, ty1, dy1, tz1, dz1, tx2, dx2, ty2, dy2, tz2, dz2, tx3, dx3, ty3, dy3, tz3, dz3, dx4, dy4, dz4, dx5, dy5, dz5)
+
+#pragma omp declare target
 void jacld(int l);
+#pragma omp end declare target
+
+#pragma omp declare target
 void blts (int ldmx, int ldmy, int ldmz, int nx, int ny, int nz, int l,
     double omega);
+#pragma omp end declare target
 void jacu(int l);
 void buts(int ldmx, int ldmy, int ldmz, int nx, int ny, int nz, int l,
     double omega);

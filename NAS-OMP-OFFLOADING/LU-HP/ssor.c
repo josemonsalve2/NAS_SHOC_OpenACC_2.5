@@ -152,7 +152,7 @@ void ssor(int niter)
   }
 
   calcnp(lst, lend);
- #pragma omp target update to(indxp,jndxp)
+ #pragma omp target update to(indxp, jndxp, np)
   timer_start(1);
   //---------------------------------------------------------------------
   // the timestep loop
@@ -192,15 +192,19 @@ void ssor(int niter)
 
     if (timeron) timer_stop(t_rhs);
 
+#pragma omp target map (alloc: a, b, c, d, u, indxp, jndxp, rho_i, qs, tv, rsd, tmat, np)\
+ map(tofrom: dt, tx1, dx1, ty1, dy1, tz1, dz1, tx2, dx2, ty2, dy2, tz2, dz2, tx3, dx3, ty3, dy3, tz3, dz3, dx4, dy4, dz4, dx5, dy5, dz5)
+//    #pragma omp distribute 
+{
     for(l = lst; l <= lend; l++)
     {
       jacld(l);
 
-      blts(ISIZ1, ISIZ2, ISIZ3,
+     blts(ISIZ1, ISIZ2, ISIZ3,
           nx, ny, nz, l,
           omega);
     }
-
+}
 
     for(l = lend; l >= lst; l--)
     {
