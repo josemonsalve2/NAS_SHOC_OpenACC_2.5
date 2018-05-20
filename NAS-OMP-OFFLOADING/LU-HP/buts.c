@@ -79,7 +79,6 @@ void buts(int ldmx, int ldmy, int ldmz, int nx, int ny, int nz, int l,
   double tmp, tmp1;
   unsigned int npl = np[l];
 
-#pragma omp target data map(alloc: a, b, c, d, indxp, jndxp, tv, rsd, tmat)
 #pragma omp target teams map(alloc: a, b, c, d, indxp, jndxp, tv, rsd, tmat)\
         num_teams((npl+127)/128)
   {
