@@ -81,7 +81,7 @@ void jacld(int l)
 
 #ifndef CRPL_COMP
 #elif CRPL_COMP == 0
-    #pragma omp teams distribute private( tmp1, tmp2, tmp3, i, j, n, k)
+    #pragma omp target teams distribute private( tmp1, tmp2, tmp3, i, j, n, k)
 #endif
     for (n = 1; n <= npl; n++) {
       j = jndxp[l][n];
