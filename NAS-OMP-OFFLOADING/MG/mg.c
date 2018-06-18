@@ -71,6 +71,8 @@
 #include "print_results.h"
 #include <omp.h>
 
+#undef _OPENACC
+
 #define I3D(array,n1,n2,i3,i2,i1) (array[(i3)*n2*n1 + (i2)*n1 + (i1)])
 
 static void setup(int *n1, int *n2, int *n3);
@@ -1420,7 +1422,7 @@ static void comm3(double *ou, int n1, int n2, int n3, int kk)
 }
 
 
-inline double randlc( double *x, double a )
+inline __attribute__((always_inline)) double randlc( double *x, double a )
 {
   const double r23 = 1.1920928955078125e-07;
   const double r46 = r23 * r23;
@@ -1447,7 +1449,7 @@ inline double randlc( double *x, double a )
   return r;
 }
 
-inline void vranlc( int n, double *x, double a, double y[] )
+inline __attribute__((always_inline)) void vranlc( int n, double *x, double a, double y[] )
 {
 
   const double r23 = 1.1920928955078125e-07;
