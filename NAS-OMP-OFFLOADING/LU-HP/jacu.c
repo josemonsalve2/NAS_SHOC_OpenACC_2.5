@@ -78,7 +78,6 @@ void jacu(int l)
   c1345 = C1 * C3 * C4 * C5;
   c34 = C3 * C4;
 
-#pragma omp target data map (alloc: a, b, c, d, u, indxp, jndxp, rho_i)
 #pragma omp target teams map (alloc: a, b, c, d, u, indxp, jndxp, rho_i) \
         num_teams((npl+127)/128)
   {
