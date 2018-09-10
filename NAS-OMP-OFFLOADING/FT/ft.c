@@ -299,7 +299,7 @@ static void init_ui(int d1, int d2, int d3)
       }
     }
   }
-#pragma omp target update from(u0_real,u0_imag,u1_real,u1_imag)
+//#pragma omp target update from(u0_real,u0_imag,u1_real,u1_imag)
 }
 
 
@@ -309,7 +309,7 @@ static void init_ui(int d1, int d2, int d3)
 static void evolve(int d1, int d2, int d3)
 {
   int i, j, k;
-//#pragma omp target update to (u0_real, u0_imag, u1_real, u1_imag, twiddle)
+//#pragma omp target update to (u0_real, u0_imag, u1_real, u1_imag, twiddle) // JOSE DELETE LATER
 #pragma omp target map (alloc: u0_real,u0_imag,u1_real,u1_imag,twiddle)
   {
 #pragma omp teams distribute
@@ -530,7 +530,7 @@ static void compute_indexmap(int d1, int d2, int d3)
       }
     }
   }
-#pragma omp target update from (twiddle)
+//#pragma omp target update from (twiddle)
 }
 
 
@@ -579,11 +579,13 @@ static void fft_init(int n)
 //#pragma acc kernels present(u_real,u_imag)
 #endif
 #pragma omp target map(alloc: u_real,u_imag) 
+  {
 //#pragma omp target update to(u_real,u_imag) 
 #pragma omp teams   
   {
     u_real[0] = m;
     u_imag[0] = 0.0;
+  }
   }
   ku = 2;
   ln = 1;
@@ -596,10 +598,10 @@ static void fft_init(int n)
 #elif CRPL_COMP == 0
 //#pragma acc kernels present(u_real,u_imag)
 #endif
-#pragma omp target map(alloc: u_real,u_imag) map(to:ku,t) 
+#pragma omp target map(alloc: u_real,u_imag)
     {
 //#pragma acc loop gang vector independent
-#pragma omp simd private(ti) 
+#pragma omp teams distribute private(ti)  // JOSE CHANGED HERE
       for (i = 0; i <= ln - 1; i++) {
         ti = i * t;
         //u[i+ku-1] = dcmplx(cos(ti), sin(ti));
@@ -607,7 +609,7 @@ static void fft_init(int n)
         u_imag[i+ku-1] = (double)sin(ti);
       }
     }
-#pragma omp target update from(u_real,u_imag) 
+//#pragma omp target update from(u_real,u_imag) 
 
     ku = ku + ln;
     ln = 2 * ln;
@@ -1271,7 +1273,7 @@ static void cffts3_pos(int is, int d1, int d2, int d3)
       }
     }
   }/* end acc parlalel */
-#pragma omp target update from (u0_real, u0_imag, u_real,u_imag) 
+//#pragma omp target update from (u0_real, u0_imag, u_real,u_imag) 
 //#pragma omp target update to ( u0_real, u0_imag, u_real,u_imag) 
 }
 
