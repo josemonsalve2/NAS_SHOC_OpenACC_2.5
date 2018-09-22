@@ -598,7 +598,7 @@ static void fft_init(int n)
 #elif CRPL_COMP == 0
 //#pragma acc kernels present(u_real,u_imag)
 #endif
-#pragma omp target map(alloc: u_real,u_imag)
+#pragma omp target map(alloc: u_real,u_imag) map(to:t)
     {
 //#pragma acc loop gang vector independent
 #pragma omp teams distribute private(ti)  // JOSE CHANGED HERE
@@ -1450,7 +1450,8 @@ static void checksum(int i, int d1, int d2, int d3)
 #pragma omp target map (alloc: u1_real, u1_imag) map(tofrom: temp1, temp2)
   {
 //#pragma acc loop gang worker vector reduction(+:temp1,temp2)
-#pragma omp teams distribute reduction(+:temp1,temp2) 
+  #pragma omp parallel for reduction(+:temp1,temp2) private(q,r,s)
+//#pragma omp teams distribute reduction(+:temp1,temp2) private(q,r,s)// This line does not work on GCC
     for (j = 1; j <= 1024; j++) {
       q = j % NX;
       r = 3*j % NY;
