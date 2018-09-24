@@ -548,7 +548,7 @@ static void psinv(double * __restrict__ or, double * __restrict__ ou, int n1, in
 #ifndef CRPL_COMP
 #pragma omp teams distribute private(i3)
 #elif CRPL_COMP == 0
-#pragma omp teams distribute parallel for collapse(3) private(i3,i2,i1)
+#pragma omp teams distribute parallel for collapse(3) //private(i3,i2,i1)
 #endif
   for (i3 = 1; i3 < n3-1; i3++) {
 #ifndef CRPL_COMP
@@ -571,7 +571,7 @@ static void psinv(double * __restrict__ or, double * __restrict__ ou, int n1, in
 #ifndef CRPL_COMP
 #pragma omp teams distribute private(i3)
 #elif CRPL_COMP == 0
-#pragma omp teams distribute parallel for collapse(3) private(i3,i2,i1)
+#pragma omp teams distribute parallel for collapse(3) //private(i3,i2,i1)
 #endif
   for (i3 = 1; i3 < n3-1; i3++) {
 #ifndef CRPL_COMP
@@ -676,7 +676,7 @@ static void resid(double * ou, double * ov, double * or, int n1, int n2, int n3,
 #ifndef CRPL_COMP
 #pragma omp teams distribute private(i3)
 #elif CRPL_COMP == 0
-#pragma omp teams distribute parallel for collapse(3) private(i3,i2,i1)
+#pragma omp teams distribute parallel for collapse(3) //private(i3,i2,i1)
 #endif
   for (i3 = 1; i3 < n3-1; i3++) {
 #ifndef CRPL_COMP
@@ -699,7 +699,7 @@ static void resid(double * ou, double * ov, double * or, int n1, int n2, int n3,
 #ifndef CRPL_COMP
 #pragma omp teams distribute private(i3)
 #elif CRPL_COMP == 0
-#pragma omp teams distribute parallel for collapse(3) private(i3,i2,i1)
+#pragma omp teams distribute parallel for collapse(3) //private(i3,i2,i1)
 #endif
   for (i3 = 1; i3 < n3-1; i3++) {
 #ifndef CRPL_COMP
@@ -807,7 +807,7 @@ static void rprj3(double *or, int m1k, int m2k, int m3k,
   }
 /* #pragma omp parallel for default(shared) private(j1,j2,j3,i1,i2,i3,x2,y2) */
 #pragma omp target is_device_ptr(x1, y1) map(tofrom: or[0:m3k*m2k*m1k]) map(tofrom: os[0:m3j*m2j*m1j]) 
-#pragma omp teams distribute parallel for default(shared) private(j1,j2,j3,i1,i2,i3) collapse(3)
+#pragma omp teams distribute parallel for default(shared) private(/*j1,j2,j3,*/i1,i2,i3) collapse(3)
   for (j3 = 1; j3 < m3j-1; j3++) {
     for (j2 = 1; j2 < m2j-1; j2++) {
       for (j1 = 1; j1 < m1j; j1++) {
@@ -828,7 +828,7 @@ static void rprj3(double *or, int m1k, int m2k, int m3k,
     }
   }
 #pragma omp target is_device_ptr(x1, y1) map(tofrom: or[0:m3k*m2k*m1k]) map(tofrom: os[0:m3j*m2j*m1j]) 
-#pragma omp teams distribute parallel for default(shared) private(j1,j2,j3,i1,i2,i3,x2,y2) collapse(3)
+#pragma omp teams distribute parallel for default(shared) private(/*j1,j2,j3,*/i1,i2,i3,x2,y2) collapse(3)
   for (j3 = 1; j3 < m3j-1; j3++) {
     for (j2 = 1; j2 < m2j-1; j2++) {
       for (j1 = 1; j1 < m1j-1; j1++) {
@@ -937,7 +937,7 @@ static void interp(double *oz, int mm1, int mm2, int mm3,
 #ifndef CRPL_COMP
 #pragma omp teams distribute  private(i3)
 #elif CRPL_COMP == 0
-#pragma omp teams distribute parallel for collapse(3) private(i3,i2,i1)
+#pragma omp teams distribute parallel for collapse(3) //private(i3,i2,i1)
 #endif
     for (i3 = 0; i3 < mm3-1; i3++) {
 #ifndef CRPL_COMP
@@ -962,7 +962,7 @@ static void interp(double *oz, int mm1, int mm2, int mm3,
 #ifndef CRPL_COMP
 #pragma omp teams distribute private(i3)
 #elif CRPL_COMP == 0
-#pragma omp teams distribute parallel for collapse(3) private(i3,i2,i1)
+#pragma omp teams distribute parallel for collapse(3) //private(i3,i2,i1)
 #endif
     for (i3 = 0; i3 < mm3-1; i3++) {
 #ifndef CRPL_COMP
@@ -986,7 +986,7 @@ static void interp(double *oz, int mm1, int mm2, int mm3,
 #ifndef CRPL_COMP
 #pragma omp teams distribute private(i3)
 #elif CRPL_COMP == 0
-#pragma omp teams distribute parallel for collapse(3) private(i3,i2,i1)
+#pragma omp teams distribute parallel for collapse(3) //private(i3,i2,i1)
 #endif
     for (i3 = 0; i3 < mm3-1; i3++) {
 #ifndef CRPL_COMP
@@ -1010,7 +1010,7 @@ static void interp(double *oz, int mm1, int mm2, int mm3,
 #ifndef CRPL_COMP
 #pragma omp teams distribute private(i3)
 #elif CRPL_COMP == 0
-#pragma omp teams distribute parallel for collapse(3) private(i3,i2,i1)
+#pragma omp teams distribute parallel for collapse(3) //private(i3,i2,i1)
 #endif
     for (i3 = 0; i3 < mm3-1; i3++) {
 #ifndef CRPL_COMP
@@ -1034,7 +1034,7 @@ static void interp(double *oz, int mm1, int mm2, int mm3,
 #ifndef CRPL_COMP
 #pragma omp teams distribute private(i3)
 #elif CRPL_COMP == 0
-#pragma omp teams distribute parallel for collapse(3) private(i3,i2,i1)
+#pragma omp teams distribute parallel for collapse(3) //private(i3,i2,i1)
 #endif
     for (i3 = 0; i3 < mm3-1; i3++) {
 #ifndef CRPL_COMP
@@ -1084,7 +1084,7 @@ static void interp(double *oz, int mm1, int mm2, int mm3,
 #ifndef CRPL_COMP
 #pragma omp teams distribute private(i3)
 #elif CRPL_COMP == 0
-#pragma omp teams distribute parallel for collapse(2) private(i3,i2,i1)
+#pragma omp teams distribute parallel for collapse(2) //  private(i3,i2,i1)
 #endif
       for (i3 = d3; i3 <= mm3-1; i3++) {
 #ifndef CRPL_COMP
@@ -1114,7 +1114,7 @@ static void interp(double *oz, int mm1, int mm2, int mm3,
 #ifndef CRPL_COMP
 #pragma omp teams distribute private(i3)
 #elif CRPL_COMP == 0
-#pragma omp teams distribute parallel for collapse(2) private(i3,i2,i1)
+#pragma omp teams distribute parallel for collapse(2) //private(i3,i2,i1)
 #endif
       for (i3 = d3; i3 <= mm3-1; i3++) {
 #ifndef CRPL_COMP
@@ -1149,7 +1149,7 @@ static void interp(double *oz, int mm1, int mm2, int mm3,
 #ifndef CRPL_COMP
 #pragma omp teams distribute private(i3)
 #elif CRPL_COMP == 0
-#pragma omp teams distribute parallel for collapse(3) private(i3,i2,i1)
+#pragma omp teams distribute parallel for collapse(3) //private(i3,i2,i1)
 #endif
       for (i3 = 1; i3 <= mm3-1; i3++) {
 #ifndef CRPL_COMP
@@ -1171,7 +1171,7 @@ static void interp(double *oz, int mm1, int mm2, int mm3,
 #ifndef CRPL_COMP
 #pragma omp teams distribute private(i3)
 #elif CRPL_COMP == 0
-#pragma omp teams distribute parallel for collapse(3) private(i3,i2,i1)
+#pragma omp teams distribute parallel for collapse(3) //private(i3,i2,i1)
 #endif
       for (i3 = 1; i3 <= mm3-1; i3++) {
 #ifndef CRPL_COMP
@@ -1196,7 +1196,7 @@ static void interp(double *oz, int mm1, int mm2, int mm3,
 #ifndef CRPL_COMP
 #pragma omp teams distribute private(i3)
 #elif CRPL_COMP == 0
-#pragma omp teams distribute parallel for collapse(3) private(i3,i2,i1)
+#pragma omp teams distribute parallel for collapse(3) //private(i3,i2,i1)
 #endif
       for (i3 = 1; i3 <= mm3-1; i3++) {
 #ifndef CRPL_COMP
@@ -1221,7 +1221,7 @@ static void interp(double *oz, int mm1, int mm2, int mm3,
 #ifndef CRPL_COMP
 #pragma omp teams distribute private(i3)
 #elif CRPL_COMP == 0
-#pragma omp teams distribute parallel for collapse(3) private(i3,i2,i1)
+#pragma omp teams distribute parallel for collapse(3) //private(i3,i2,i1)
 #endif
       for (i3 = 1; i3 <= mm3-1; i3++) {
 #ifndef CRPL_COMP
@@ -1314,7 +1314,7 @@ static void norm2u3(double *or, int n1, int n2, int n3,
 #ifndef CRPL_COMP
 #pragma omp teams distribute reduction(+:s) reduction(max:temp)  private(i3)
 #elif CRPL_COMP == 0
-#pragma omp teams distribute parallel for reduction(+:s) reduction(max:temp) private(i3,i2,i1) collapse(3)
+#pragma omp teams distribute parallel for reduction(+:s) reduction(max:temp) /*private(i3,i2,i1)*/ collapse(3)
 #endif
     for (i3 = 1; i3 < n3-1; i3++) {
 #ifndef CRPL_COMP
@@ -1366,7 +1366,7 @@ static void comm3(double *ou, int n1, int n2, int n3, int kk)
 #ifndef CRPL_COMP
 #pragma omp teams distribute private(i3)
 #elif CRPL_COMP == 0
-#pragma omp teams distribute parallel for collapse(2) private(i3,i2)
+#pragma omp teams distribute parallel for collapse(2) //private(i3,i2)
 #endif
     for (i3 = 1; i3 < n3-1; i3++) {
 #ifndef CRPL_COMP
@@ -1384,7 +1384,7 @@ static void comm3(double *ou, int n1, int n2, int n3, int kk)
 #ifndef CRPL_COMP
 #pragma omp teams distribute private(i3)
 #elif CRPL_COMP == 0
-#pragma omp teams distribute parallel for private(i3,i1) collapse(2)
+#pragma omp teams distribute parallel for /*private(i3,i1)*/ collapse(2)
 #endif
     for (i3 = 1; i3 < n3-1; i3++) {
 #ifndef CRPL_COMP
@@ -1403,7 +1403,7 @@ static void comm3(double *ou, int n1, int n2, int n3, int kk)
 #ifndef CRPL_COMP
 #pragma omp teams distribute private(i2)
 #elif CRPL_COMP == 0
-#pragma omp teams distribute parallel for collapse(2) private(i2,i1)
+#pragma omp teams distribute parallel for collapse(2) //private(i2,i1)
 #endif
     for (i2 = 0; i2 < n2; i2++) {
 #ifndef CRPL_COMP
@@ -1617,7 +1617,7 @@ static void zran3(double *oz, int n1, int n2, int n3, int nx, int ny, int k)
 #ifndef CRPL_COMP
 #pragma omp teams distribute private(i3)
 #elif CRPL_COMP == 0
-#pragma omp teams distribute parallel for collapse(3) private(i3,i2,i1)
+#pragma omp teams distribute parallel for collapse(3) //private(i3,i2,i1)
 #endif
   for (i3 = 0; i3 < n3; i3++) {
 #ifndef CRPL_COMP
@@ -1633,7 +1633,7 @@ static void zran3(double *oz, int n1, int n2, int n3, int nx, int ny, int k)
 
 #pragma omp target data map(tofrom: oz[0:n3*n2*n1]) map(to: jg[0:4][0:mm][0:2])
   {
-#pragma omp target teams distribute parallel for map(tofrom: oz[0:n3*n2*n1]) map(to: jg[0:4][0:mm][0:2]) private(i)
+#pragma omp target teams distribute parallel for map(tofrom: oz[0:n3*n2*n1]) map(to: jg[0:4][0:mm][0:2]) //private(i)
     for (i = mm-1; i >= m0; i--) {
       //z[jg[3][i][0]][jg[2][i][0]][jg[1][i][0]] = -1.0;
       i3 = jg[3][i][0];
@@ -1642,7 +1642,7 @@ static void zran3(double *oz, int n1, int n2, int n3, int nx, int ny, int k)
       I3D(oz, n1, n2, i3, i2, i1) = -1.0;
     }
 
-#pragma omp target teams distribute parallel for map(tofrom: oz[0:n3*n2*n1]) map(to: jg[0:4][0:mm][0:2]) private(i)
+#pragma omp target teams distribute parallel for map(tofrom: oz[0:n3*n2*n1]) map(to: jg[0:4][0:mm][0:2]) //private(i)
     for (i = mm-1; i >= m1; i--) {
       //z[jg[3][i][1]][jg[2][i][1]][jg[1][i][1]] = +1.0;
       i3 = jg[3][i][1];
@@ -1781,7 +1781,7 @@ static void zero3(double *oz, int n1, int n2, int n3)
 #ifndef CRPL_COMP
 #pragma omp teams distribute private(i3)
 #elif CRPL_COMP == 0
-#pragma omp teams distribute parallel for collapse(3) private(i3,i2,i1)
+#pragma omp teams distribute parallel for collapse(3) //private(i3,i2,i1)
 #endif
   for (i3 = 0; i3 < n3; i3++) {
 #ifndef CRPL_COMP
